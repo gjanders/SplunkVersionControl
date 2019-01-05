@@ -467,7 +467,7 @@ class SplunkVersionControl:
                         
                     #REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
                     if type == "fieldtransformations" and info.has_key("FORMAT") and info["FORMAT"] == "nullQueue":
-                        logger.warn("Dropping the transfer of %s of type %s in app context %s with owner %s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (info["name"], type, app, info["owner"]))
+                        logger.info("Dropping the backup of %s of type %s in app context %s with owner %s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (info["name"], type, app, info["owner"]))
                     else:
                         infoList[sharing].append(info)
                         logger.info("Recording %s info for %s in app context %s with owner %s" % (type, info["name"], app, info["owner"]))
