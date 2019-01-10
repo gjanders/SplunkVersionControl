@@ -700,12 +700,12 @@ class SplunkVersionControlBackup:
         return res
     
     #We keep a remote excluded app list so we don't backup anything that we are requested not to backup...
-    def removeExcludedApps(self, appList, versionControlExclusionFile):
-        res = self.runSearchJob("| inputlookup splunkversioncontrol_globalexclusionlist | inputlookup append=true %s" % (versionControlExclusionFile))
+    def removeExcludedApps(self, appList):
+        res = self.runSearchJob("| inputlookup splunkversioncontrol_globalexclusionlist")
         resList = res["results"]
         #The append often makes this throw a warning that it does not exist as it's optional...
-        #if len(res["messages"]) > 0:
-            #logger.warn("messages from inputlookup splunkversioncontrol_globalexclusionlist | append=true %s were %s" % (versionControlExclusionFile, res["messages"]))
+        if len(res["messages"]) > 0:
+            logger.warn("messages from inputlookup splunkversioncontrol_globalexclusionlist were %s" % (res["messages"]))
         for appDict in resList:
             appName = appDict["app"]
             if appName in appList:
@@ -944,9 +944,8 @@ class SplunkVersionControlBackup:
         #use lookup to check if we have run before, if so run queries if not just backup everything
         appList = self.getAllAppsList()
 
-        versionControlExclusionFile = "splunkversioncontrol_%s_exclusionlist.csv" % (stanzaName)
         logger.debug("AppList is (before trim) %s" % (appList))
-        self.removeExcludedApps(appList, versionControlExclusionFile)
+        self.removeExcludedApps(appList)
         logger.debug("AppList is (post trim) %s" % (appList))
 
         self.gitTempDir = config['gitTempDir']
@@ -971,18 +970,18 @@ class SplunkVersionControlBackup:
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
         
         #Version Control File to record when we last ran
-        versionControlFile = "splunkversioncontrol_%s_lastrunepoch" % (stanzaName)
-        res = self.runSearchJob("| inputlookup %s.csv" % (versionControlFile))
+        versionControlFile = "splunkversioncontrol_lastrunepoch"
+        res = self.runSearchJob("| inputlookup %s" % (versionControlFile))
         resList = res["results"]
         lastRunEpoch = None
 
         appsWithChanges = None
         if len(resList) == 0:
-            logger.info("%s.csv does not exist, running against all apps now" % (versionControlFile))
+            logger.info("%s does not exist, running against all apps now" % (versionControlFile))
         else:
             appsWithChanges = {}
             lastRunEpoch = resList[0]["earliest"]
-            logger.info("%s.csv reports a last run epoch of %s using this date in report calls" % (versionControlFile, lastRunEpoch))
+            logger.info("%s reports a last run epoch of %s using this date in report calls" % (versionControlFile, lastRunEpoch))
             
             #Run a query to determine which apps/types of knowledge objects have changed since the last run
             res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Directory\" updatedEpoch=%s" % (lastRunEpoch))
@@ -1148,14 +1147,14 @@ class SplunkVersionControlBackup:
                 logger.error("Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (output, stderrout))
         
         #Output the time we did the run so we know where to continue from at next runtime
-        res = self.runSearchJob("| makeresults | eval earliest=%s | fields - _time | outputlookup %s.csv" % (currentEpochTime, versionControlFile))
+        res = self.runSearchJob("| makeresults | eval earliest=%s | fields - _time | outputlookup %s" % (currentEpochTime, versionControlFile))
         if len(res["messages"]) > 0:
             logger.info("messages from makeresults command were %s" % (res["messages"]))
         
         logger.info("Last run epoch written as %s" % (currentEpochTime))
         
         #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
-        res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist.csv" % (todaysDate))
+        res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist" % (todaysDate))
 
         logger.info("Done")
     

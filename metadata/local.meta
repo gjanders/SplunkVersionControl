@@ -12,6 +12,20 @@ owner = nobody
 version = 7.2.0
 modtime = 1547085986.665861000
 
+[lookups/splunkversioncontrol_lastrunepoch.csv]
+access = read : [ admin ], write : [ admin ]
+export = none
+owner = nobody
+version = 7.2.0
+modtime = 1547085974.731656000
+
+[transforms/splunkversioncontrol_lastrunepoch]
+access = read : [ admin ], write : [ admin ]
+export = none
+owner = nobody
+version = 7.2.0
+modtime = 1547085974.731656000
+
 [savedsearches/SplunkVersionControl%20ChangeDetector%20Directory]
 access = read : [ admin ], write : [ admin ]
 export = none

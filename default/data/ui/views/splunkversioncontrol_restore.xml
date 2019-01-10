@@ -45,7 +45,7 @@
       <fieldForLabel>tag</fieldForLabel>
       <fieldForValue>tag</fieldForValue>
       <search>
-        <query>| inputlookup splunkversioncontrol_taglist.csv | sort - tag</query>
+        <query>| inputlookup splunkversioncontrol_taglist | sort - tag</query>
         <earliest>-24h@h</earliest>
         <latest>now</latest>
       </search>
