@@ -1,0 +1,83 @@
+<form>
+  <label>SplunkVersionControl Restore</label>
+  <description>Use this page to request the restoration of a Splunk knowledge object, note that once restored the previous knowledge object is overwritten so use this restoration page with caution. Restores occur every 10 minutes? (maybe)</description>
+  <fieldset submitButton="true">
+    <input type="dropdown" token="app">
+      <label>Application Name</label>
+      <fieldForLabel>app</fieldForLabel>
+      <fieldForValue>app</fieldForValue>
+      <search>
+        <query>| rest /services/apps/local search="disabled=0" count=0 f=title splunk_server=local
+| rename title as app
+| search NOT [ | inputlookup splunkversioncontrol_globalexclusionlist ]
+| table app</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="type">
+      <label>Object Type</label>
+      <choice value="dashboard">dashboard</choice>
+      <choice value="savedsearch">savedsearch (Reports/Alerts)</choice>
+      <choice value="macro">macros</choice>
+      <choice value="fieldalias">fieldalias</choice>
+      <choice value="fieldextraction">fieldextraction</choice>
+      <choice value="fieldtransformation">fieldtransform</choice>
+      <choice value="navmenu">navmenu</choice>
+      <choice value="datamodel">datamodel</choice>
+      <choice value="panels">prebuilt panels</choice>
+      <choice value="calcfields">calcfields</choice>
+      <choice value="workflowaction">workflowaction</choice>
+      <choice value="sourcetyperenaming">sourcetypeRename</choice>
+      <choice value="tags">tags</choice>
+      <choice value="eventtypes">eventtypes</choice>
+      <choice value="lookupdef">lookup (definition only)</choice>
+      <choice value="automaticlookup">automaticLookup</choice>
+      <choice value="collection">collection (kvstore)</choice>
+      <choice value="viewstate">viewstate</choice>
+      <choice value="times">times</choice>
+    </input>
+    <input type="text" token="name">
+      <label>Object URI/Name (not label)</label>
+    </input>
+    <input type="dropdown" token="tag">
+      <label>Restore date/time (UTC timestamp)</label>
+      <fieldForLabel>tag</fieldForLabel>
+      <fieldForValue>tag</fieldForValue>
+      <search>
+        <query>| inputlookup splunkversioncontrol_taglist.csv | sort - tag</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="text" token="restoreAsUser">
+      <label>Restore As User? (this field only works for admins, empty values are fine)</label>
+      <default>""</default>
+      <initialValue>""</initialValue>
+    </input>
+    <input type="dropdown" token="scope">
+      <label>Scope</label>
+      <choice value="all">All</choice>
+      <choice value="user">Private (user level sharing)</choice>
+      <choice value="app">App (or global/everyone) sharing</choice>
+      <default>all</default>
+      <initialValue>all</initialValue>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>This output displays what has been added to the restoration request list after the submit button is clicked</title>
+      <table>
+        <title>SplunkVersionControl AddToLookup</title>
+        <search>
+          <query>| savedsearch "SplunkVersionControl AddToLookup" app="$app$", type="$type$", name="$name$", tag="$tag$", user="$env:user$", restoreAsUser="$restoreAsUser$", scope="$scope$"</query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
