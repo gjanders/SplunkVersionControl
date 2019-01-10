@@ -21,7 +21,7 @@ The restore portion provides a Splunk modular input and a dashboard (SplunkVersi
 
 Use the SplunkVersionControl Restore dashboard to request that a knowledge object be restored to a prior version. You must be the author of the knowledge objects you wish to restore, or have the admin role. The application with the knowledge object in it must still exist on the Splunk server.
 
-When a knowledge object restore is requested, the modular input either creates or updates the knowledge object with the requested git tag, or logs the failure to find the object in the logs. The modular input also outputs restored knowledge objects to a lookup with the definition splunkversioncontrol_restorelist.
+When a knowledge object restore is requested the dashboard (SplunkVersionControl Restore) outputs the knowledge object information to a lookup with the definition splunkversioncontrol_restorelist. The modular input then triggers the restore based on the contents of this lookup, the modular input either creates or updates the knowledge object with the requested git tag, or logs the failure to find the object in the logs.
 
 ## Security Concerns
 The ability to restore/create configuration opens up a few obvious issues:
