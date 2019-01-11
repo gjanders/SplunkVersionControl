@@ -66,6 +66,7 @@ class SplunkVersionControlRestore:
     gitTempDir = None
     appName = "SplunkVersionControl"
     gitRepoURL = None
+    stanzaName = None
     
     # read XML configuration passed from splunkd
     def get_config(self):
@@ -90,16 +91,17 @@ class SplunkVersionControlRestore:
                     if stanza_name:
                         logger.debug("XML: found stanza " + stanza_name)
                         config["name"] = stanza_name
-
+                        shortName = stanza_name.replace("splunkversioncontrol_restore://", "")
+                        
                         params = stanza.getElementsByTagName("param")
                         for param in params:
                             param_name = param.getAttribute("name")
-                            logger.debug("XML: found param '%s'" % param_name)
+                            logger.debug("i=\"%s\" XML: found param=\"%s\"" % (shortName, param_name))
                             if param_name and param.firstChild and \
                                param.firstChild.nodeType == param.firstChild.TEXT_NODE:
                                 data = param.firstChild.data
                                 config[param_name] = data
-                                logger.debug("XML: '%s' -> '%s'" % (param_name, data))
+                                logger.debug("i=\"%s\" XML: \"%s\"=\"%s\"" % (shortName, param_name, data))
 
             if not config:
                 raise Exception, "Invalid configuration received from Splunk."
@@ -118,11 +120,11 @@ class SplunkVersionControlRestore:
     # 
     ###########################
     def runQueries(self, app, endpoint, type, name, scope, user, restoreAsUser, adminLevel):
-        logger.info("User %s, attempting to restore %s in app %s of type %s in scope %s, as user %s, adminLevel %s" % (user, name, app, type, scope, restoreAsUser, adminLevel))
+        logger.info("i=\"%s\" user=%s, attempting to restore name=%s in app=%s of type=%s in scope=%s, restoreAsUser=%s, adminLevel=%s" % (self.stanzaName, user, name, app, type, scope, restoreAsUser, adminLevel))
         
         #Check if the object exists or not
         url = self.splunk_rest + "/servicesNS/-/%s%s/%s?output_mode=json" % (app, endpoint, name)
-        logger.debug("Running requests.get() on %s with username %s in app %s" % (url, self.destUsername, app))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s" % (self.stanzaName, url, self.destUsername, app))
 
         #Determine scope that we will attempt to restore
         appScope = False
@@ -135,7 +137,7 @@ class SplunkVersionControlRestore:
         elif scope == "user":
             userScope = True
         else:
-            logger.error("User %s, while attempting to restore %s, found invalid scope of %s" % (user, name, scope))
+            logger.error("i=\"%s\" user=%s, while attempting to restore name=%s, found invalid scope of scope=%s" % (self.stanzaName, user, name, scope))
 
         headers = {}
         auth = None
@@ -151,13 +153,13 @@ class SplunkVersionControlRestore:
         
         #If we get 404 it definitely does not exist
         if (res.status_code == 404):
-            logger.debug("URL %s is throwing a 404, assuming new object creation" % (url))
+            logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, url))
         elif (res.status_code != requests.codes.ok):
-            logger.error("URL %s in app %s status code %s reason %s, response: '%s'" % (url, app, res.status_code, res.reason, res.text))
+            logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
         else:
             #However the fact that we did not get a 404 does not mean it exists in the context we expect it to, perhaps it's global and from another app context?
             #or perhaps it's app level but we're restoring a private object...
-            logger.debug("Attempting to JSON loads on %s" % (res.text))
+            logger.debug("i=\"%s\" Attempting to JSON loads on %s" % (self.stanzaName, res.text))
             resDict = json.loads(res.text)
             for entry in resDict['entry']:
                 sharingLevel = entry['acl']['sharing']
@@ -169,6 +171,7 @@ class SplunkVersionControlRestore:
         
         configList = []
         
+        foundAtAnyScope = False
         #We need to work with user scope
         if userScope == True:
             userDir = self.gitTempDir + "/" + app + "/" + "user"
@@ -177,25 +180,26 @@ class SplunkVersionControlRestore:
                 typeFile = userDir + "/" + type
                 if os.path.isfile(typeFile):
                     #The file exists, open it and read the config
-                    logger.debug("User %s, name %s, found %s file to restore from" % (user, name, typeFile))
+                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
                     with open(typeFile, 'r') as f:
                         configList = json.load(f)
                         found = False
                         for configItem in configList:
                             if configItem['name'] == name:
                                 #We found the configItem we need, run the restoration
-                                logger.debug("User %s, name %s is found, dictionary is %s" % (user, name, configItem))
+                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
                                 self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
                                 found = True
+                                foundAtAnyScope = True
                         #Let the logs know we never found it at this scope
                         if found == False:
-                            logger.info("User %s, name %s not found at user level scope in file %s" % (user, name, typeFile))
+                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=user in file=%s" % (self.stanzaName, user, name, typeFile))
                 #We never found a file that we could use to restore from  at this scope
                 else:
-                    logger.info("User %s, name %s, did not find a %s file to restore from" % (user, name, typeFile))
+                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no user level objects for this app, therefore the restore will not occur at this scope
-                logger.info("user directory of %s does not exist" % (userDir))
+                logger.info("i=\"%s\" user directory of dir=%s does not exist" % (self.stanzaName, userDir))
         
         #It's either app level of globally scoped
         if appScope == True:
@@ -205,25 +209,26 @@ class SplunkVersionControlRestore:
                 typeFile = appDir + "/" + type
                 if os.path.isfile(typeFile):
                     #The file we need exists
-                    logger.debug("User %s, name %s, found %s file to restore from" % (user, name, typeFile))
+                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
                     with open(typeFile, 'r') as f:
                         configList = json.load(f)
                         found = False
                         for configItem in configList:
                             #We found the required configuration file, now we restore the object
                             if configItem['name'] == name:
-                                logger.debug("User %s, name %s is found, dictionary is %s" % (user, name, configItem))
+                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
                                 self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
                                 found = True
+                                foundAtAnyScope = True
                         #We never found the object we wanted to restore
                         if found == False:
-                            logger.info("User %s, name %s not found at app level scope in file %s" % (user, name, typeFile))
+                            logger.info("i=\"%s\" user=%s, name=%s not found at app level scope in typeFile=%s" % (self.stanzaName, user, name, typeFile))
                 #We did not find the file we wanted to restore from
                 else:
-                    logger.info("User %s, name %s, did not find a %s file to restore from" % (user, name, typeFile))
+                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #The app level scope directory does not exist for this app
-                logger.info("app directory of %s does not exist" % (appDir))
+                logger.info("i=\"%s\" app directory of dir=%s does not exist" % (self.stanzaName, appDir))
             
             #If could also be a global level restore...
             globalDir = self.gitTempDir + "/" + app + "/" + "global"
@@ -232,26 +237,32 @@ class SplunkVersionControlRestore:
                 typeFile = globalDir + "/" + type
                 if os.path.isfile(typeFile):
                     #We found the file to restore from
-                    logger.debug("User %s, name %s, found %s file to restore from" % (user, name, typeFile))
+                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
                     with open(typeFile, 'r') as f:
                         configList = json.load(f)
                         found = False
                         for configItem in configList:
                             #We found the relevant piece of configuration to restore, now run the restore
                             if configItem['name'] == name:
-                                logger.debug("User %s, name %s is found, dictionary is %s" % (user, name, configItem))
+                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
                                 self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
                                 found = True
+                                foundAtAnyScope = True
                         #We never found the config we wanted to restore
                         if found == False:
-                            logger.info("User %s, name %s not found at global level scope in file %s" % (user, name, typeFile))
-                #This type of configuration does not exist at the global level                
+                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=global in typeFile=%s" % (self.stanzaName, user, name, typeFile))
+                #This type of configuration does not exist at the global level
                 else:
-                    logger.info("User %s, name %s, did not find a %s file to restore from" % (user, name, typeFile))
+                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             #The global directory for this app does not exist
             else:
-                logger.debug("global directory of %s does not exist" % (globalDir))
-
+                logger.debug("i=\"%s\" global directory of dir=%s does not exist" % (self.stanzaName, globalDir))
+        
+        if foundAtAnyScope == True:
+            logger.info("i=\"%s\" user=%s restore has run successfully for name=%s, type=%s, restoreAsUser=%s, adminLevel=%s" % (self.stanzaName, user, name, type, restoreAsUser, adminLevel))
+        else:
+            logger.warn("i=\"%s\" user=%s attempted to restore name=%s, type=%s, restoreAsUser=%s, adminLevel=%s however the object was not found, the restore was unsuccessful. Perhaps check the restore date, scope & capitilisation before trying again?" % (self.stanzaName, user, name, type, restoreAsUser, adminLevel))
+    
     ###########################
     #
     # runRestore (generic version)
@@ -262,19 +273,19 @@ class SplunkVersionControlRestore:
     def runRestore(self, config, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists):
         #Only an admin can restore an object owned by someone else
         if config['owner'] != user and adminLevel == False:
-            logger.error("Owner of the object is listed as %s, however user %s requested the restore and is not an admin, rejected" % (config['owner'], user))
+            logger.error("i=\"%s\" Owner of the object is listed as owner=%s, however user user=%s requested the restore and is not an admin, rejected" % (self.stanzaName, config['owner'], user))
             return
         
         #Only an admin can use the restoreAsUser option
         if restoreAsUser != "" and restoreAsUser != user and adminLevel == False:
-            logger.error("restoreAsUser is %s which is not the username of %s, this user is not an admin, rejected")
+            logger.error("i=\"%s\" restoreAsUser=%s which is not user=%s, this user is not an admin, rejected" % (self.stanzaName))
             return
         
         #Change the owner to the new oner
         if restoreAsUser != "" and adminLevel == True:
             config["owner"] = restoreAsUser
         
-        logger.info("Attempting to run restore for %s of type %s with endpoint %s username %s, restoreAsUser %s, adminLevel %s, objExists %s" % (name, type, endpoint, user, restoreAsUser, adminLevel, objExists))
+        logger.info("i=\"%s\" Attempting to run restore for name=%s of type=%s with endpoint=%s user=%s, restoreAsUser=%s, adminLevel=%s, objExists=%s" % (self.stanzaName, name, type, endpoint, user, restoreAsUser, adminLevel, objExists))
 
         sharing = config["sharing"]
         owner = config["owner"]
@@ -309,21 +320,21 @@ class SplunkVersionControlRestore:
         if type=="times_conf-times" and not payload.has_key("is_sub_menu"):
             payload["is_sub_menu"] = "0"
         
-        logger.debug("Attempting to create or update %s with name %s on URL %s with payload '%s' in app %s" % (type, name, url, payload, app))
+        logger.debug("i=\"%s\" Attempting to create or update type=%s with name=%s on URL=%s with payload=\"%s\" in app=%s" % (self.stanzaName, type, name, url, payload, app))
         res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
         if (res.status_code != requests.codes.ok and res.status_code != 201):
-            logger.error("%s of type %s with URL %s status code %s reason %s, response '%s', in app %s, owner %s" % (name, type, url, res.status_code, res.reason, res.text, app, owner))
+            logger.error("i=\"%s\" name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, name, type, url, res.status_code, res.reason, res.text, app, owner))
             #Saved Searches sometimes fail due to the VSID field, auto-retry in case that solves the problem...
             if type=="savedsearches":
                 if 'vsid' in payload:
                     del payload['vsid']
                     res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
                     if (res.status_code != requests.codes.ok and res.status_code != 201):
-                        logger.error("Re-attempted without vsid but result was %s of type %s with URL %s status code %s reason %s, response '%s', in app %s, owner %s" % (name, type, url, res.status_code, res.reason, res.text, app, owner))
+                        logger.error("i=\"%s\" Re-attempted without vsid but result for name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, name, type, url, res.status_code, res.reason, res.text, app, owner))
                     else:
-                        logger.info("%s of type %s with URL %s successfully created with the vsid field removed, feel free to ignore the previous error" % (name, type, url))
+                        logger.info("i=\"%s\" name=%s of type=%s with URL=%s successfully created with the vsid field removed, feel free to ignore the previous error" % (self.stanzaName, name, type, url))
         else:
-            logger.debug("%s of type %s in app %s with URL %s result is: '%s' owner of %s" % (name, type, app, url, res.text, owner))
+            logger.debug("i=\"%s\" name=%s of type=%s in app=%s with URL=%s result=\"%s\" owner=%s" % (self.stanzaName, name, type, app, url, res.text, owner))
             
             #Parse the result to find re-confirm the URL and check for messages from Splunk (and log warnings about them)
             root = ET.fromstring(res.text)
@@ -335,26 +346,26 @@ class SplunkVersionControlRestore:
                         #print innerChild.tag
                         if innerChild.tag.endswith("link") and innerChild.attrib["rel"]=="remove":
                             objURL = "%s/%s" % (self.splunk_rest, innerChild.attrib["href"])
-                            logger.debug("%s of type %s in app %s URL as %s" % (name, type, app, objURL))
+                            logger.debug("i=\"%s\" name=%s of type=%s in app=%s URL=%s" % (self.stanzaName, name, type, app, objURL))
                 elif child.tag.endswith("messages"):
                     for innerChild in child:
                         if innerChild.tag.endswith("msg") and innerChild.attrib["type"]=="ERROR" or innerChild.attrib.has_key("WARN"):
-                            logger.warn("%s of type %s in app %s had a warn/error message of '%s' owner of %s" % (name, type, app, innerChild.text, owner))
+                            logger.warn("i=\"%s\" name=%s of type=%s in app=%s had a warn/error message of '%s' owner=%s" % (self.stanzaName, name, type, app, innerChild.text, owner))
                             #Sometimes the object appears to be create but is unusable which is annoying, at least provide the warning to the logs
             
             #Re-owning it to the previous owner and sharing level
             url = "%s/acl" % (objURL)
             payload = { "owner": owner, "sharing" : sharing }
-            logger.info("Attempting to change ownership of %s with name %s via URL %s to owner %s in app %s with sharing %s" % (type, name, url, owner, app, sharing))
+            logger.info("i=\"%s\" Attempting to change ownership of type=%s with name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanzaName, type, name, url, owner, app, sharing))
             res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
             
             #If re-own fails log this for investigation
             if (res.status_code != requests.codes.ok):
-                logger.error("%s of type %s in app %s with URL %s status code %s reason %s, response '%s', owner of %s" % (name, type, app, url, res.status_code, res.reason, res.text, owner))
+                logger.error("i=\"%s\" name=%s of type=%s in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (self.stanzaName, name, type, app, url, res.status_code, res.reason, res.text, owner))
             else:
-                logger.debug("%s of type %s in app %s, ownership changed with response: %s, owner %s, sharing level %s" % (name, type, app, res.text, owner, sharing))
+                logger.debug("i=\"%s\" name=%s of type=%s in app=%s, ownership changed with response=\"%s\", owner=%s, sharing=%s" % (self.stanzaName, name, type, app, res.text, owner, sharing))
         
-        logger.info("Created %s of type %s in app %s owner is %s sharing level %s" % (name, type, app, owner, sharing))
+        logger.info("i=\"%s\" Created name=%s of type=%s in app=%s owner=%s sharing=%s" % (self.stanzaName, name, type, app, owner, sharing))
 
     ###########################
     #
@@ -365,15 +376,15 @@ class SplunkVersionControlRestore:
     def runRestoreMacro(self, config, app, name, username, restoreAsUser, adminLevel, objExists):
         #Only admins can restore objects on behalf of someone else
         if config['owner'] != username and adminLevel == False:
-            logger.error("Owner of the object is listed as %s, however user %s requested the restore and is not an admin, rejected" % (config['owner'], username))
+            logger.error("i=\"%s\" Owner of the object is listed as owner=%s, however user=%s requested the restore and is not an admin, rejected" % (self.stanzaName, config['owner'], username))
             return
         
         #Only admins can restore objects into someone else's name
         if restoreAsUser != "" and restoreAsUser != username and adminLevel == False:
-            logger.error("restoreAsUser is %s which is not the username of %s, this user is not an admin, rejected")
+            logger.error("i=\"%s\" restoreAsUser=%s which is not the user=%s, this user is not an admin, rejected" % (self.stanzaName))
             return
 
-        logger.info("Attempting to run macro restore with name %s, username %s, restoreAsUser %s, adminLevel %s, objExists %s" % (name, username, restoreAsUser, adminLevel, objExists))            
+        logger.info("i=\"%s\" Attempting to run macro restore with name=%s, user=%s, restoreAsUser=%s, adminLevel=%s, objExists=%s" % (self.stanzaName, name, username, restoreAsUser, adminLevel, objExists))
         #Change the owner to the new oner
         if restoreAsUser != "" and adminLevel == True:
             config["owner"] = restoreAsUser
@@ -392,7 +403,7 @@ class SplunkVersionControlRestore:
         #We are creating the macro
         if objExists == False:
             url = "%s/servicesNS/%s/%s/properties/macros" % (self.splunk_rest, owner, app)
-            logger.info("Attempting to create macro %s on URL with name %s in app %s" % (name, url, app))
+            logger.info("i=\"%s\" Attempting to create type=macro name=%s on URL=%s in app=%s" % (self.stanzaName, name, url, app))
 
             payload = { "__stanza" : name }
             #Create macro
@@ -402,13 +413,13 @@ class SplunkVersionControlRestore:
             
             res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
             if (res.status_code != requests.codes.ok and res.status_code != 201):
-                logger.error("%s of type macro in app %s with URL %s status code %s reason %s, response '%s', owner %s" % (name, app, url, res.status_code, res.reason, res.text, owner))
+                logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text, owner))
             else:
                 #Macros always have the username in this URL context
                 objURL = "%s/servicesNS/%s/%s/configs/conf-macros/%s" % (self.splunk_rest, owner, app, name)
-                logger.debug("%s of type macro in app %s recording deletion URL as %s with owner %s" % (name, app, objURL, owner))
+                logger.debug("i=\"%s\" name=%s of type=macro in app=%s URL=%s with owner=%s" % (self.stanzaName, name, app, objURL, owner))
 
-            logger.debug("%s of type macro in app %s, received response of: '%s'" % (name, app, res.text))
+            logger.debug("i=\"%s\" name=%s of type=macro in app=%s, received response=\"%s\"" % (self.stanzaName, name, app, res.text))
 
         #Now we have created the macro, modify it so it has some real content (or it's an existing macro we're fixing)
         #If this is an app or globally scoped object use the nobody in the URL
@@ -424,20 +435,20 @@ class SplunkVersionControlRestore:
         del config["owner"]
         payload = config
         
-        logger.debug("Attempting to modify macro %s on URL %s with payload '%s' in app %s" % (name, url, payload, app))
+        logger.debug("i=\"%s\" Attempting to modify type=macro name=%s on URL=%s with payload=\"%s\" in app=%s" % (self.stanzaName, name, url, payload, app))
         res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
         if (res.status_code != requests.codes.ok and res.status_code != 201):
-            logger.error("%s of type macro in app %s with URL %s status code %s reason %s, response '%s'" % (name, app, url, res.status_code, res.reason, res.text))
+            logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text))
         else:
             #Re-owning it, I've switched URL's again here but it seems to be working so will not change it
             url = "%s/servicesNS/%s/%s/configs/conf-macros/%s/acl" % (self.splunk_rest, owner, app, name)
             payload = { "owner": owner, "sharing" : sharing }
-            logger.info("Attempting to change ownership of macro %s via URL %s to owner %s in app %s with sharing %s" % (name, url, owner, app, sharing))
+            logger.info("i=\"%s\" Attempting to change ownership of type=macro name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanzaName, name, url, owner, app, sharing))
             res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
             if (res.status_code != requests.codes.ok):
-                logger.error("%s of type macro in app %s with URL %s status code %s reason %s, response '%s', owner %s sharing level %s" % (name, app, url, res.status_code, res.reason, res.text, owner, sharing))
+                logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s sharing=%s" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text, owner, sharing))
             else:
-                logger.debug("%s of type macro in app %s, ownership changed with response '%s', new owner %s and sharing level %s" % (name, app, res.text, owner, sharing))
+                logger.debug("i=\"%s\" name=%s of type=macro in app=%s, ownership changed with response=\"%s\", newOwner=%s and sharing=%s" % (self.stanzaName, name, app, res.text, owner, sharing))
     
     ###########################
     #
@@ -447,10 +458,11 @@ class SplunkVersionControlRestore:
     #macro use cases are slightly different to everything else on the REST API
     #enough that this code has not been integrated into the runQuery() function
     def macros(self, app, name, scope, user, restoreAsUser, adminLevel):
+        logger.info("i=\"%s\" user=%s, attempting to restore name=%s in app=%s of type=macro in scope=%s, restoreAsUser=%s, adminLevel=%s" % (self.stanzaName, user, name, app, scope, restoreAsUser, adminLevel))
         #servicesNS/-/-/properties/macros doesn't show private macros so using /configs/conf-macros to find all the macros
         #again with count=-1 to find all the available macros
         url = self.splunk_rest + "/servicesNS/-/" + app + "/configs/conf-macros/" + name + "?output_mode=json"
-        logger.debug("Running requests.get() on %s with username %s in app %s for type macro" % (url, self.destUsername, app))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type=macro" % (self.stanzaName, url, self.destUsername, app))
         
         #Determine scope that we will attempt to restore
         appScope = False
@@ -463,7 +475,7 @@ class SplunkVersionControlRestore:
         elif scope == "user":
             userScope = True
         else:
-            logger.error("User %s, while attempting to restore %s, found invalid scope of %s" % (user, name, scope))
+            logger.error("i=\"%s\" user=%s, while attempting to restore name=%s, found invalid scope=%s" % (self.stanzaName, user, name, scope))
 
         headers = {}
         auth = None
@@ -476,13 +488,13 @@ class SplunkVersionControlRestore:
         res = requests.get(url, auth=auth, headers=headers, verify=False)
         objExists = False
         if (res.status_code == 404):
-            logger.debug("URL %s is throwing a 404, assuming new object creation" % (url))
+            logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, url))
         elif (res.status_code != requests.codes.ok):
-            logger.error("Type macro in app %s, URL %s status code %s reason %s, response '%s'" % (app, url, res.status_code, res.reason, res.text))
+            logger.error("i=\"%s\" type=macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
         else:
             #However the fact that we did not get a 404 does not mean it exists in the context we expect it to, perhaps it's global and from another app context?
             #or perhaps it's app level but we're restoring a private object...
-            logger.debug("Attempting to JSON loads on %s" % (res.text))
+            logger.debug("i=\"%s\" Attempting to JSON loads on %s" % (self.stanzaName, res.text))
             resDict = json.loads(res.text)
             for entry in resDict['entry']:
                 sharingLevel = entry['acl']['sharing']
@@ -494,6 +506,7 @@ class SplunkVersionControlRestore:
         
         configList = []
         
+        foundAtAnyScope = False
         #This object is at user scope or may be at user scope
         if userScope == True:
             userDir = self.gitTempDir + "/" + app + "/" + "user"
@@ -502,25 +515,26 @@ class SplunkVersionControlRestore:
                 typeFile = userDir + "/macros"
                 #We found the file, now open it to obtain the contents
                 if os.path.isfile(typeFile):
-                    logger.debug("User %s, name %s, found %s file to restore from" % (user, name, typeFile))
+                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
                     with open(typeFile, 'r') as f:
                         configList = json.load(f)
                         found = False
                         for configItem in configList:
                             #We found the relevant item, now restore it
                             if configItem['name'] == name:
-                                logger.debug("User %s, name %s is found, dictionary is %s" % (user, name, configItem))
+                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary=\"%s\"" % (self.stanzaName, user, name, configItem))
                                 self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
                                 found = True
+                                foundAtAnyScope = True
                         #We never found the relevant item
                         if found == False:
-                            logger.info("User %s, name %s not found at user level scope in file %s" % (user, name, typeFile))
+                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=user in typeFile=%s" % (self.stanzaName, user, name, typeFile))
                 #The config file did not exist
                 else:
-                    logger.info("User %s, name %s, did not find a %s file to restore from" % (user, name, typeFile))
+                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no user level objects for this app, therefore the restore will not occur at this scope
-                logger.info("user directory of %s does not exist" % (userDir))
+                logger.info("i=\"%s\" user directory of dir=%s does not exist" % (self.stanzaName, userDir))
 
         #The object is either app or globally scoped
         if appScope == True:
@@ -530,25 +544,26 @@ class SplunkVersionControlRestore:
                 typeFile = appDir + "/macros"
                 #We found the file, open it and load the config
                 if os.path.isfile(typeFile):
-                    logger.debug("User %s, name %s, found %s file to restore from" % (user, name, typeFile))
+                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
                     with open(typeFile, 'r') as f:
                         configList = json.load(f)
                         found = False
                         #We found the item, now restore it
                         for configItem in configList:
                             if configItem['name'] == name:
-                                logger.debug("User %s, name %s is found, dictionary is %s" % (user, name, configItem))
+                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
                                 self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
                                 found = True
+                                foundAtAnyScope = True
                         #We never found the item
                         if found == False:
-                            logger.info("User %s, name %s not found at app level scope in file %s" % (user, name, typeFile))
+                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=app in typeFile=%s" % (self.stanzaName, user, name, typeFile))
                 #We never found the file to restore from
                 else:
-                    logger.info("User %s, name %s, did not find a %s file to restore from" % (user, name, typeFile))
+                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no app level objects for this app, therefore the restore will not occur at this scope
-                logger.info("app directory of %s does not exist" % (appDir))
+                logger.info("i=\"%s\" app directory of dir=%s does not exist" % (self.stanzaName, appDir))
             
             globalDir = self.gitTempDir + "/" + app + "/" + "global"
             #global directory exists
@@ -556,25 +571,31 @@ class SplunkVersionControlRestore:
                 typeFile = globalDir + "/macros"
                 #We found the file, attempt to load the config
                 if os.path.isfile(typeFile):
-                    logger.debug("User %s, name %s, found %s file to restore from" % (user, name, typeFile))
+                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
                     with open(typeFile, 'r') as f:
                         configList = json.load(f)
                         found = False
                         for configItem in configList:
                             #We found the item,  now restore it
                             if configItem['name'] == name:
-                                logger.debug("User %s, name %s is found, dictionary is %s" % (user, name, configItem))
+                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
                                 self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
                                 found = True
+                                foundAtAnyScope = True
                         #We never found the item
                         if found == False:
-                            logger.info("User %s, name %s not found at global level scope in file %s" % (user, name, typeFile))
+                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=global in typeFile=%s" % (self.stanzaName, user, name, typeFile))
                 #We did not find the file to restore from
                 else:
-                    logger.info("User %s, name %s, did not find a %s file to restore from" % (user, name, typeFile))
+                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no global level objects for this app, therefore the restore will not occur at this scope
-                logger.info("global directory of %s does not exist" % (globalDir))
+                logger.info("i=\"%s\" global directory of dir=%s does not exist" % (self.stanzaName, globalDir))
+        
+        if foundAtAnyScope == True:
+            logger.info("i=\"%s\" user=%s restore has run successfully for name=%s, type=macro, restoreAsUser=%s, adminLevel=%s" % (self.stanzaName, user, name, restoreAsUser, adminLevel))
+        else:
+            logger.warn("i=\"%s\" user=%s attempted to restore name=%s, type=macro, restoreAsUser=%s, adminLevel=%s however the object was not found, the restore was unsuccessful. Perhaps check the restore date, scope & capitalisation before trying again?" % (self.stanzaName, user, name, restoreAsUser, adminLevel))
 
     ###########################
     #
@@ -710,7 +731,7 @@ class SplunkVersionControlRestore:
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, query, earliest_time="-1h"):
         url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
-        logger.debug("Running requests.get() on %s with username %s" % (url, self.destUsername))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s query=\"%s\"" % (self.stanzaName, url, self.destUsername, query))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot", "earliest_time" : earliest_time }
         
         #no destUsername, use the session_key method    
@@ -723,7 +744,7 @@ class SplunkVersionControlRestore:
         
         res = requests.post(url, auth=auth, headers=headers, verify=False, data=data)
         if (res.status_code != requests.codes.ok):
-            logger.error("URL %s status code %s reason %s, response '%s'" % (url, res.status_code, res.reason, res.text))
+            logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
         
         return res
@@ -739,8 +760,9 @@ class SplunkVersionControlRestore:
         if 'debugMode' in config:
             debugMode = config['debugMode'].lower()
             if debugMode == "true" or debugMode == "t":
-                logging.getLogger().setLevel(logging.DEBUG)        
+                logging.getLogger().setLevel(logging.DEBUG)
         
+        self.stanzaName = config["name"].replace("splunkversioncontrol_restore://", "")
         useLocalAuth = False
         if 'useLocalAuth' in config:
             useLocalAuth = config['useLocalAuth'].lower()
@@ -751,7 +773,7 @@ class SplunkVersionControlRestore:
         
         #If we're not using the useLocalAuth we must have a username/password to work with
         if useLocalAuth == False and ('destUsername' not in config or 'destPassword' not in config):
-            logger.fatal("useLocalAuth is not set to true and destUsername/destPassword not set, exiting with failure")
+            logger.fatal("i=\"%s\" useLocalAuth is not set to true and destUsername/destPassword not set, exiting with failure" % (self.stanzaName))
             sys.exit(1)
         
         if useLocalAuth == False:
@@ -771,7 +793,7 @@ class SplunkVersionControlRestore:
         self.splunk_rest = config['destURL']
         excludedList = [ "destPassword", "session_key" ]
         cleanArgs = self.without_keys(config, excludedList)
-        logger.info("Splunk Version Control Restore run with arguments %s" % (cleanArgs))
+        logger.info("i=\"%s\" Splunk Version Control Restore run with arguments=\"%s\"" % (self.stanzaName, cleanArgs))
 
         self.session_key = config['session_key']
         
@@ -786,16 +808,16 @@ class SplunkVersionControlRestore:
             #Initially we must trust our remote repo URL
             (output, stderrout, res) = self.runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")])
             if res == False:
-                logger.warn("Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (output, stderrout))
+                logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             #Clone the remote git repo
             (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=30)
             if res == False:
-                logger.fatal("git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.gitRepoURL, output, stderrout))
+                logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
             else:
-                logger.debug("result from git command: %s, output '%s' with stderroutput of '%s'" % (res, output, stderrout))
-                logger.info("Successfully cloned the git URL from %s into directory %s" % (self.gitRepoURL, self.gitTempDir))
+                logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
+                logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
         
         #Version Control File that lists what restore we need to do...
@@ -804,18 +826,18 @@ class SplunkVersionControlRestore:
         resList = res["results"]
 
         if len(resList) == 0:
-            logger.info("No restore required at this point in time")
+            logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
             #Do a git pull to ensure we are up-to-date
             (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=30)
             if res == False:
-                logger.fatal("git pull failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.gitRepoURL, output, stderrout))
+                logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
             else:
-                logger.debug("result from git command: %s, output '%s' with stderroutput of '%s'" % (res, output, stderrout))
-                logger.info("Successfully ran the git pull for URL %s from directory %s" % (self.gitRepoURL, self.gitTempDir))
+                logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
+                logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
             
-            logger.debug("The restore list is %s" % (resList))
+            logger.debug("i=\"%s\" The restore list is %s" % (self.stanzaName, resList))
             
             #Attempt to determine all users involved in this restore so we can run a single query and determine if they are admins or not
             userList = []
@@ -839,7 +861,7 @@ class SplunkVersionControlRestore:
             res = self.runSearchJob("| savedsearch \"SplunkVersionControl CheckAdmin\" ldapFilter=\"%s\", usernameFilter=\"%s\"" % (ldapFilter, usernameFilter))
             userResList = []
             if 'results' not in res:
-                logger.warn("Unable to run 'SplunkVersionControl CheckAdmin' for some reason with ldapFilter %s and usernameFilter %s" % (ldapFilter, usernameFilter))
+                logger.warn("i=\"%s\" Unable to run 'SplunkVersionControl CheckAdmin' for some reason with ldapFilter=%s and usernameFilter=%s" % (self.stanzaName, ldapFilter, usernameFilter))
             else:
                 userResList = res["results"]
             
@@ -848,7 +870,7 @@ class SplunkVersionControlRestore:
             adminList = []
             for userRes in userResList:
                 username = userRes["username"]
-                logger.debug("Adding %s as an admin username" % (username))
+                logger.debug("i=\"%s\" Adding user=%s as an admin username" % (self.stanzaName, username))
                 adminList.append(username)
             
             # Run yet another query, this one provides a list of times/usernames at which valid entries were added to the lookup file
@@ -857,10 +879,10 @@ class SplunkVersionControlRestore:
             res = self.runSearchJob("| savedsearch \"SplunkVersionControl Audit Query\"", earliest_time=auditLogsLookupBackTime)
             auditEntries = []
             if 'results' not in res:
-                logger.warn("Unable to run 'SplunkVersionControl Audit Query' for some reason with earliest_time %s" % (auditLogsLookupBackTime))
+                logger.warn("i=\"%s\" Unable to run 'SplunkVersionControl Audit Query' for some reason with earliest_time=%s" % (self.stanzaName, auditLogsLookupBackTime))
             else:
                 auditEntries = res["results"]
-                logger.debug("Audit Entries are: '%s'" % (auditEntries))
+                logger.debug("i=\"%s\" Audit Entries are: '%s'" % (self.stanzaName, auditEntries))
             
             #Cycle through each result from the earlier lookup and run the required restoration
             for aRes in resList:
@@ -873,7 +895,7 @@ class SplunkVersionControlRestore:
                 user = aRes['user']
                 scope = aRes['scope']
 
-                logger.info("User %s has requested the object with name %s of type %s to be restored from tag %s and scope of %s, restoreAsUser is %s request was requested at %s" % (user, name, type, tag, scope, restoreAsUser, time))                
+                logger.info("i=\"%s\" user=%s has requested the object with name=%s of type=%s to be restored from tag=%s and scope=%s, restoreAsUser=%s, this was requested at time=%s" % (self.stanzaName, user, name, type, tag, scope, restoreAsUser, time))
                 
                 #If we have an entry in the lookup file it should be listed in the audit entries file
                 found = False
@@ -886,43 +908,43 @@ class SplunkVersionControlRestore:
                         found = True
                         auditUser = entry['user']
                         if user != auditUser:
-                            logger.warn("User %s found time entry of %s with username %s, however expected %s, rejecting this entry for name %s of type %s in app %s with restoreAsUser %s" % (user, time, auditUser, name, type, app, restoreAsUser))
+                            logger.warn("i=\"%s\" user=%s found time entry of time=%s with user=%s, however expected time=%s, rejecting this entry for name=%s of type=%s in app=%s with restoreAsUser=%s" % (self.stanzaName, user, time, auditUser, name, type, app, restoreAsUser))
                             continue
                         else:
-                            logger.debug("User %s, found time entry of %s, considering this a valid entry and proceeding to restore" % (user, time))
+                            logger.debug("i=\"%s\" user=%s, found time entry of time=%s, considering this a valid entry and proceeding to restore" % (self.stanzaName, user, time))
                 
                 if found == False:
-                    logger.warn("Unable to find a time entry of %s matching the auditEntries list of %s, skipping this entry" % (time, auditEntries))
+                    logger.warn("i=\"%s\" Unable to find a time entry of time=%s matching the auditEntries list of %s, skipping this entry" % (self.stanzaName, time, auditEntries))
                     continue
                 
                 adminLevel = False
                 
                 if user in adminList:
-                    logger.debug("User %s is an admin and has requested object %s of type %s in app %s to be restored with username of %s time of %s" % (user, name, type, app, restoreAsUser, time))
+                    logger.debug("i=\"%s\" user=%s is an admin and has requested object name=%s of type=%s in app=%s to be restored with user=%s and time=%s" % (self.stanzaName, user, name, type, app, restoreAsUser, time))
                     adminLevel = True
                 
                 #Only admins can restore objects as another user
                 if restoreAsUser != "" and restoreAsUser != user and adminLevel == False:
-                    logger.error("User %s is not an admin and has attempted to restore as a different user, requested user is %s, object %s of type %s in app %s to be restored with username of %s time of %s, rejected" % (user, restoreAsUser, name, type, app, restoreAsUser, time))
+                    logger.error("i=\"%s\" user=%s is not an admin and has attempted to restore as a different user, requested user=%s, object=%s of type=%s in app=%s to be restored with restoreAsUser=%s time=%s, rejected" % (self.stanzaName, user, restoreAsUser, name, type, app, restoreAsUser, time))
                     continue
                 
                 #Do a git pull to ensure we are up-to-date
                 (output, stderrout, res) = self.runOSProcess("cd %s; git checkout %s" % (self.gitTempDir, tag))
                 if res == False:
-                    logger.error("User %s, object name %s, type %s, time %s, git checkout %s failed in directory %s stdout of '%s' with stderrout of '%s'" % (user, name, type, time, tag, self.gitTempDir, output, stderrout))
+                    logger.error("i=\"%s\" user=%s, object name=%s, type=%s, time=%s, git checkout of tag=%s failed in directory dir=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, user, name, type, time, tag, self.gitTempDir, output, stderrout))
                 else:
-                    logger.debug("result from git command: %s, output '%s' with stderroutput of '%s'" % (res, output, stderrout))
-                    logger.info("Successfully ran the git checkout for URL %s from directory %s" % (self.gitRepoURL, self.gitTempDir))
+                    logger.debug("i=\"%s\" result from git command=%s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
+                    logger.info("i=\"%s\" Successfully ran the git checkout for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
 
                 knownAppList = []
                 if os.path.isdir(self.gitTempDir):
                     #include the subdirectory which is the git repo
                     knownAppList = os.listdir(self.gitTempDir)
-                    logger.debug("Known app list is %s" % (knownAppList))
+                    logger.debug("i=\"%s\" Known app list is %s" % (self.stanzaName, knownAppList))
 
                 #If the app is not known, the restore stops here as we have nothing to restore from!
                 if app not in knownAppList:
-                    logger.error("User %s requested a restore from app %s but this is not in the knownAppList therefore restore cannot occur, object %s of type %s to be restored with username of %s time of %s" % (user, app, name, type, restoreAsUser, time))
+                    logger.error("i=\"%s\" user=%s requested a restore from app=%s but this is not in the knownAppList therefore restore cannot occur, object=%s of type=%s to be restored with user=%s and time=%s" % (self.stanzaName, user, app, name, type, restoreAsUser, time))
                     continue
                 
                 #Deal with the different types of restores that might be required, we only do one row at a time...
@@ -965,18 +987,18 @@ class SplunkVersionControlRestore:
                 elif type == "times":
                     self.times(app, name, scope, user, restoreAsUser, adminLevel)
                 else:
-                    logger.error("User %s, unknown type, no restore will occur for object %s of type %s in app %s to be restored with username of %s time of %s" % (user, name, type, app, restoreAsUser, time))
+                    logger.error("i=\"%s\" user=%s, unknown type, no restore will occur for object=%s of type=%s in app=%s to be restored with restoreAsUser=%s and time=%s" % (self.stanzaName, user, name, type, app, restoreAsUser, time))
 
         #Wipe the lookup file so we do not attempt to restore these entries again
         if len(resList) != 0:
             res = self.runSearchJob("| makeresults | fields - _time | outputlookup %s" % (restoreList))
-            logger.info("Cleared the lookup file to ensure we do not attempt to restore the same entries again")
+            logger.info("i=\"%s\" Cleared the lookup file to ensure we do not attempt to restore the same entries again" % (self.stanzaName))
         
-        logger.info("Done")
+        logger.info("i=\"%s\" Done" % (self.stanzaName))
     
     #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
     def runOSProcess(self, command, timeout=10):
-        logger.debug("Running command '%s' with timeout %s" % (command, timeout))
+        logger.debug("i=\"%s\" Running command=\"%s\" with timeout=%s" % (self.stanzaName, command, timeout))
         p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
         for t in xrange(timeout):
             sleep(1)
