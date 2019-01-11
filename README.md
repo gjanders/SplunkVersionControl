@@ -46,7 +46,7 @@ No. However, the backup/restore modular input must have access to its own git te
 ## When will a full application backup occur?
 During the first run of the script (at which point the lookup file is empty) all applications and all objects will be backed up.
 
-During each subsequent run of the script, if an application is found in the Splunk system but not on the filesystem then the backup of all objects will occur
+During each subsequent run of the script, if an application is found in the Splunk system but not on the filesystem then the backup of all objects within that application will occur
 
 Otherwise an incremental backup of knowledge objects occurs (see below)
 
