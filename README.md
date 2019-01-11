@@ -1,18 +1,27 @@
 # Splunk Version Control
-## Why?
-Splunk (as of the time of writing in January 2019) has no ability to version control it's knowledge objects. This can lead to issues where an object is accidentally changed, or deleted and their is no restore mechanism beyond OS level backups which are difficult to utilise in a search head cluster
 
 ## What does this app do?
-The backup portion of the app provides a Splunk modular input with the ability to serialize various Splunk knowledge objects into JSON format which is then stored in a remote git repository and tag'ed based on each change to the backup
 
-The restore portion provides a Splunk modular input and a user accessible dashboard (SplunkVersionControl Restore) that can be used to request the restoration of a knowledge object, it will then either create or update the knowledge object to the requested git tag or log the failure to find the object in the logs.
+This app allows you to back up and use version control to manage your Splunk knowledge objects, such as saved searches and macros.
 
-## How?
-Provide a Splunk modular input to backup configuration into a remote git repository (Splunk Version Control Backup or splunkversioncontrol_backup) and another input that provides restore functionality (Splunk Version Control Restore or splunkversioncontrol_restore)
+## Why?
+Splunk (as of the time of writing in January 2019) has no native ability to use version control on its knowledge objects. This can lead to issues where an object is accidentally changed or deleted and there is no way to restore them beyond using OS-level backups, which are difficult to use in a search head cluster.
 
-Note that these two inputs do not have to be on the same machine, however they must be pointing to the same git repository and the gitTempDir must be unique on the filesystem if sharing the same machine
+## How does the app function?
 
-For the customers a dashboard is provided within the SplunkVersionControl app called "SplunkVersionControl Restore", from this dashboard any user can request restoration of a knowledge object (deleted or existing) as long as the application still exists on the server, when run this outputs the entry into the lookup definition splunkversioncontrol_restorelist
+The app uses two modular inputs to back up and restore configurations, Splunk Version Control Backup (or splunkversioncontrol_backup) and and Splunk Version Control Restore (or splunkversioncontrol_restore). 
+
+The backup portion of the app provides a Splunk modular input with the ability to serialize various Splunk knowledge objects into JSON format, which is then stored in a remote git repository and tagged based on each change to the backup.
+
+These two inputs do not have to be on the same machine, however, they must be pointing to the same git repository and the gitTempDir must be unique on the filesystem if sharing the same machine.
+
+The restore portion provides a Splunk modular input and a dashboard (SplunkVersionControl Restore) that can be used to request the restoration of a knowledge object.
+
+## How do I restore a knowledge object?
+
+Use the SplunkVersionControl Restore dashboard to request that a knowledge object be restored to a prior version. You must be the author of the knowledge objects you wish to restore, or have the admin role. The application with the knowledge object in it must still exist on the Splunk server.
+
+When a knowledge object restore is requested the dashboard (SplunkVersionControl Restore) outputs the knowledge object information to a lookup with the definition splunkversioncontrol_restorelist. The modular input then triggers the restore based on the contents of this lookup, the modular input either creates or updates the knowledge object with the requested git tag, or logs the failure to find the object in the logs.
 
 ## Security Concerns
 The ability to restore/create configuration opens up a few obvious issues:
@@ -20,11 +29,11 @@ The ability to restore/create configuration opens up a few obvious issues:
 - What if a user attempts to restore the objects of another user?
 - What if a user attempts to restore an object but re-own it to a different user?
 
-To address these issues a report named "SplunkVersionControl Audit Query" was created to run a query against the audit logs to determine if the lookup was updated by the saved search "SplunkVersionControl AddToLookup", this search returns a username and a time (it looks back/forwards one second from when the lookup was created).
+To address these issues, a report named "SplunkVersionControl Audit Query" runs a query against the audit logs to determine if the lookup was updated by the saved search "SplunkVersionControl AddToLookup". This audit query returns a username and a time (it looks back/forwards one second from when the lookup was created).
 
-The restoration script than validates that the username entered in the lookup file and the time match those found in the audit log, if they do not match then the restoration is rejected
+The restoration script then validates that the username entered in the lookup file and the time match those found in the audit log. If they do not match then the restoration is rejected.
 
-If a user attempts to restore the objects of another user, or attempts to restore the objects as a different user, this is allowed if the user has the admin role (which is determined by the saved search "SplunkVersionControl CheckAdmin")
+If a user attempts to restore the objects of another user, or attempts to restore the objects as a different user, this is allowed if the user has the admin role (which is determined by the saved search "SplunkVersionControl CheckAdmin").
 
 ## What is required for this application to work with a remote git repository?
 The following assumptions are made:
@@ -32,7 +41,7 @@ The following assumptions are made:
 - git is using an SSH-based URL and the remote git repository allows the machine running the SplunkVersionControl application to remotely access the repository without a username/password prompt (i.e. SSH keys are in use)
 
 ## Do the modular input backup and restore tasks need to be on the same Splunk instance?
-This is not a requirement, it is however a requirement that any backup/restore modular input has access to it's own git temporary directory on the OS filesystem
+No. However, the backup/restore modular input must have access to its own git temporary directory on the OS filesystem.
 
 ## When will a full application backup occur?
 During the first run of the script (at which point the lookup file is empty) all applications and all objects will be backed up.
