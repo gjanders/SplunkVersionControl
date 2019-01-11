@@ -1,6 +1,6 @@
 <form>
   <label>SplunkVersionControl Restore</label>
-  <description>Use this page to request the restoration of a Splunk knowledge object, note that once restored the previous knowledge object is overwritten so use this restoration page with caution. Restores occur every 10 minutes? (maybe)</description>
+  <description>Use this page to request the restoration of a Splunk knowledge object, note that once restored the previous knowledge object is overwritten so use this restoration page with caution</description>
   <fieldset submitButton="true">
     <input type="dropdown" token="app">
       <label>Application Name</label>
