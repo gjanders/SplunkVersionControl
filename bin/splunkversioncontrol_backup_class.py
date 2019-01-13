@@ -300,6 +300,8 @@ class SplunkVersionControlBackup:
                 #If we have not set the keep flag to False
                 if keep:
                     if nameOverride != "":
+                        #keep a copy of the original name for use when checking if the object exists
+                        info["origName"] = info["name"]
                         info["name"] = info[nameOverride]
                         #TODO hack to handle field extractions where they have an extra piece of info in the name
                         #as in the name is prepended with EXTRACT-, REPORT- or LOOKUP-, we need to remove this before creating
