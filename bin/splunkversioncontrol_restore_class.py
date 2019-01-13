@@ -151,7 +151,7 @@ class SplunkVersionControlRestore:
         res = requests.get(url, auth=auth, headers=headers, verify=False)
         objExists = False
         
-        #If we get 404 it definitely does not exist
+        #If we get 404 it definitely does not exist or it has a name override 
         if (res.status_code == 404):
             logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, url))
         elif (res.status_code != requests.codes.ok):
@@ -309,6 +309,41 @@ class SplunkVersionControlRestore:
             url = "%s/servicesNS/nobody/%s%s" % (self.splunk_rest, app, endpoint)
         
         payload = config
+        
+        #The config has an origName in it, therefore the object exists lookup may have not worked as expected
+        #repeat it here for the edge cases (field extractions, field transforms and automatic lookups)
+        if 'origName' in config:
+            origName = config['origName']
+            objExistsURL = "%s/%s" % (url, origName)
+            logger.debug("i=\"%s\" URL=%s re-checking object exists URL due to name override from %s to original name of %s" % (self.stanzaName, objExistsURL, name, origName))
+            #Verify=false is hardcoded to workaround local SSL issues
+            res = requests.get(objExistsURL, auth=auth, headers=headers, verify=False)
+        
+            #If we get 404 it definitely does not exist or it has a name override 
+            if (res.status_code == 404):
+                logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, objExistsURL))
+                objExists = False
+            elif (res.status_code != requests.codes.ok):
+                logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, objExistsURL, app, res.status_code, res.reason, res.text))
+            else:
+                #However the fact that we did not get a 404 does not mean it exists in the context we expect it to, perhaps it's global and from another app context?
+                #or perhaps it's app level but we're restoring a private object...
+                logger.debug("i=\"%s\" Attempting to JSON loads on %s" % (self.stanzaName, res.text))
+                resDict = json.loads(res.text)
+                for entry in resDict['entry']:
+                    sharingLevel = entry['acl']['sharing']
+                    appContext = entry['acl']['app']
+                    appScope = False
+                    userScope = False
+                    if sharing == "global" or sharing == "app":
+                        appScope = True
+                    else:
+                        userScope = True
+                    if appContext == app and appScope == True and (sharingLevel == 'app' or sharingLevel == 'global'):
+                        objExists = True
+                    elif appContext == app and userScope == True and sharingLevel == "user":
+                        objExists = True
+                logger.debug("i=\"%s\" app=%s objExists=%s after re-checking on %s" % (self.stanzaName, app, objExists, objExistsURL))
         
         #This is an existing object we are modifying
         if objExists == True:
