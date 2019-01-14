@@ -192,6 +192,11 @@ class SplunkVersionControlBackup:
                     if innerChild.tag.endswith("title"):
                         title = innerChild.text
                         info["name"] = title
+                        #Backup the original name if we override it, override works fine for creation
+                        #but updates require the original name
+                        if 'name' in aliasAttributes.values():
+                            info["origName"] = title
+                        
                         logger.debug("i=\"%s\" name=%s is the entry for type=%s in app=%s" % (self.stanzaName, title, type, app))
                         #If we have an include/exclude list we deal with that scenario now
                         if self.includeEntities:
@@ -342,26 +347,26 @@ class SplunkVersionControlBackup:
         
         #Cycle through each one we need to backup, we do global/app/user as users can duplicate app level objects with the same names
         #but we create everything at user level first then re-own it so global/app must happen first
-        if infoList.has_key("global"):
-            logger.debug("i=\"%s\" Now persisting knowledge objects of type=%s with sharing=global in app=%s" % (self.stanzaName, type, app))
+        if infoList.has_key("global"):            
             #persist global to disk
             globalStorageDir = appStorageDir + "/global"
+            logger.debug("i=\"%s\" Now persisting knowledge objects of type=%s with sharing=global in app=%s into dir=%s" % (self.stanzaName, type, app, globalStorageDir))
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
             with open(globalStorageDir + "/" + type, 'w') as f:
                 json.dump(infoList["global"], f)
         if infoList.has_key("app"):
-            logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s with sharing=app in app=%s" % (self.stanzaName, type, app))
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
+            logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s with sharing=app in app=%s into dir=%s" % (self.stanzaName, type, app, appLevelStorageDir))
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
             with open(appLevelStorageDir + "/" + type, 'w') as f:
                 json.dump(infoList["app"], f)
         if infoList.has_key("user"):
-            logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s sharing=user (private) in app=%s" % (self.stanzaName, type, app))
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
+            logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s sharing=user (private) in app=%s into dir=%s" % (self.stanzaName, type, app, userLevelStorageDir))
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
             with open(userLevelStorageDir + "/" + type, 'w') as f:
@@ -686,7 +691,7 @@ class SplunkVersionControlBackup:
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, query):
         url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s query=\"%s\"" % (self.stanzaName, url, self.srcUsername, query))
+        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\"" % (self.stanzaName, url, self.srcUsername, query))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot" }
         
         #no srcUsername, use the session_key method    
@@ -701,15 +706,22 @@ class SplunkVersionControlBackup:
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
         
+        #Log return messages from Splunk, often these advise of an issue but not always...
+        if len(res["messages"]) > 0:
+            firstMessage = res["messages"][0]
+            if 'type' in firstMessage and firstMessage['type'] == "INFO":
+                logger.debug("Fond type of %s" % (firstMessage['type']))
+                #This is a harmless info message ,most other messages are likely an issue
+                logger.info("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
+            else:
+                logger.debug("Fond type of %s" % (firstMessage['type']))
+                logger.warn("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
         return res
     
     #We keep a remote excluded app list so we don't backup anything that we are requested not to backup...
     def removeExcludedApps(self, appList):
         res = self.runSearchJob("| inputlookup splunkversioncontrol_globalexclusionlist")
         resList = res["results"]
-        #The append often makes this throw a warning that it does not exist as it's optional...
-        if len(res["messages"]) > 0:
-            logger.warn("i=\"%s\" messages from inputlookup splunkversioncontrol_globalexclusionlist were \"%s\"" % (self.stanzaName, res["messages"]))
         for appDict in resList:
             appName = appDict["app"]
             if appName in appList:
@@ -953,12 +965,14 @@ class SplunkVersionControlBackup:
         logger.debug("i=\"%s\" AppList is (post trim) %s" % (self.stanzaName, appList))
 
         self.gitTempDir = config['gitTempDir']
-        if os.path.isdir(self.gitTempDir):
+        dirExists = os.path.isdir(self.gitTempDir)
+        if dirExists and len(os.listdir(self.gitTempDir)) != 0:
             #include the subdirectory which is the git repo
             self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
         else:
-            #make the directory and clone under here
-            os.mkdir(self.gitTempDir)
+            if not dirExists:
+                #make the directory and clone under here
+                os.mkdir(self.gitTempDir)
             #Initially we must trust our remote repo URL
             (output, stderrout, res) = self.runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")])
             if res == False:
@@ -1151,10 +1165,7 @@ class SplunkVersionControlBackup:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
         
         #Output the time we did the run so we know where to continue from at next runtime
-        res = self.runSearchJob("| makeresults | eval earliest=%s | fields - _time | outputlookup %s" % (currentEpochTime, versionControlFile))
-        if len(res["messages"]) > 0:
-            logger.info("i=\"%s\" messages from makeresults command were %s" % (self.stanzaName, res["messages"]))
-        
+        res = self.runSearchJob("| makeresults | eval earliest=%s | fields - _time | outputlookup %s" % (currentEpochTime, versionControlFile))       
         logger.info("i=\"%s\" lastrun_epoch=%s written to lookup" % (self.stanzaName, currentEpochTime))
         
         #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
