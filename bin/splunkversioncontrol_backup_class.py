@@ -710,11 +710,9 @@ class SplunkVersionControlBackup:
         if len(res["messages"]) > 0:
             firstMessage = res["messages"][0]
             if 'type' in firstMessage and firstMessage['type'] == "INFO":
-                logger.debug("Fond type of %s" % (firstMessage['type']))
                 #This is a harmless info message ,most other messages are likely an issue
                 logger.info("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
             else:
-                logger.debug("Fond type of %s" % (firstMessage['type']))
                 logger.warn("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
         return res
     
