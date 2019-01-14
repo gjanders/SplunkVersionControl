@@ -954,6 +954,10 @@ class SplunkVersionControlRestore:
             
             #Cycle through each result from the earlier lookup and run the required restoration
             for aRes in resList:
+                if not all (entry in aRes for entry in ('time', 'app', 'name', 'restoreAsUser', 'tag', 'type', 'user', 'scope')):
+                    logger.warn("i=\"%s\" this row is invalid, skipping this row of the results, res=\"%s\"" % (self.stanzaName, aRes))
+                    continue
+                
                 time = aRes['time']
                 app = aRes['app']
                 name = aRes['name']
@@ -963,7 +967,7 @@ class SplunkVersionControlRestore:
                 user = aRes['user']
                 scope = aRes['scope']
 
-                logger.info("i=\"%s\" user=%s has requested the object with name=%s of type=%s to be restored from tag=%s and scope=%s, restoreAsUser=%s, this was requested at time=%s" % (self.stanzaName, user, name, type, tag, scope, restoreAsUser, time))
+                logger.info("i=\"%s\" user=%s has requested the object with name=%s of type=%s to be restored from tag=%s and scope=%s, restoreAsUser=%s, this was requested at time=%s in app context of app=%s" % (self.stanzaName, user, name, type, tag, scope, restoreAsUser, time, app))
                 
                 #If we have an entry in the lookup file it should be listed in the audit entries file
                 found = False
@@ -976,13 +980,13 @@ class SplunkVersionControlRestore:
                         found = True
                         auditUser = entry['user']
                         if user != auditUser:
-                            logger.warn("i=\"%s\" user=%s found time entry of time=%s with user=%s, however expected time=%s, rejecting this entry for name=%s of type=%s in app=%s with restoreAsUser=%s" % (self.stanzaName, user, time, auditUser, name, type, app, restoreAsUser))
-                            continue
+                            logger.warn("i=\"%s\" user=%s found time entry of time=%s with auditUser=%s, this does not match the expected username (%s), rejecting this entry for name=%s of type=%s in app=%s with restoreAsUser=%s" % (self.stanzaName, user, time, auditUser, user, name, type, app, restoreAsUser))
+                            found = False
                         else:
                             logger.debug("i=\"%s\" user=%s, found time entry of time=%s, considering this a valid entry and proceeding to restore" % (self.stanzaName, user, time))
                 
                 if found == False:
-                    logger.warn("i=\"%s\" Unable to find a time entry of time=%s matching the auditEntries list of %s, skipping this entry" % (self.stanzaName, time, auditEntries))
+                    logger.warn("i=\"%s\" user=%s, unable to find a time entry of time=%s matching the auditEntries list of %s, skipping this entry" % (self.stanzaName, user, time, auditEntries))
                     continue
                 
                 adminLevel = False
