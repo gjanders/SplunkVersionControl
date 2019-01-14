@@ -122,8 +122,16 @@ class SplunkVersionControlRestore:
     def runQueries(self, app, endpoint, type, name, scope, user, restoreAsUser, adminLevel):
         logger.info("i=\"%s\" user=%s, attempting to restore name=%s in app=%s of type=%s in scope=%s, restoreAsUser=%s, adminLevel=%s" % (self.stanzaName, user, name, app, type, scope, restoreAsUser, adminLevel))
         
+        url = None
         #Check if the object exists or not
-        url = self.splunk_rest + "/servicesNS/-/%s%s/%s?output_mode=json" % (app, endpoint, name)
+        #Data models require a slightly different URL to just about everything else
+        if type=="datamodels" and (scope=="app" or scope=="global"):
+            url = self.splunk_rest + "/servicesNS/nobody/%s%s/%s?output_mode=json" % (app, endpoint, name)
+        elif type=="datamodels":
+            url = self.splunk_rest + "/servicesNS/%s/%s%s/%s?output_mode=json" % (user, app, endpoint, name)
+        else:
+            url = self.splunk_rest + "/servicesNS/-/%s%s/%s?output_mode=json" % (app, endpoint, name)
+        
         logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s" % (self.stanzaName, url, self.destUsername, app))
 
         #Determine scope that we will attempt to restore
@@ -151,7 +159,7 @@ class SplunkVersionControlRestore:
         res = requests.get(url, auth=auth, headers=headers, verify=False)
         objExists = False
         
-        #If we get 404 it definitely does not exist
+        #If we get 404 it definitely does not exist or it has a name override 
         if (res.status_code == 404):
             logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, url))
         elif (res.status_code != requests.codes.ok):
@@ -185,7 +193,7 @@ class SplunkVersionControlRestore:
                         configList = json.load(f)
                         found = False
                         for configItem in configList:
-                            if configItem['name'] == name:
+                            if configItem['name'] == name or ('origName' in configItem and configItem['origName'] == name):
                                 #We found the configItem we need, run the restoration
                                 logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
                                 self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
@@ -290,6 +298,12 @@ class SplunkVersionControlRestore:
         sharing = config["sharing"]
         owner = config["owner"]
 
+        createOrUpdate = None
+        if objExists == True:
+            createOrUpdate = "update"
+        else:
+            createOrUpdate = "create"
+        
         headers = {}
         auth = None
         if not self.destUsername:
@@ -310,31 +324,75 @@ class SplunkVersionControlRestore:
         
         payload = config
         
+        #The config has an origName in it, therefore the object exists lookup may have not worked as expected
+        #repeat it here for the edge cases (field extractions, field transforms and automatic lookups)
+        if 'origName' in config:
+            origName = config['origName']
+            del config['origName']
+            objExistsURL = "%s/%s?output_mode=json" % (url, origName)
+            logger.debug("i=\"%s\" URL=%s re-checking object exists URL due to name override from %s to original name of %s" % (self.stanzaName, objExistsURL, name, origName))
+            #Verify=false is hardcoded to workaround local SSL issues
+            res = requests.get(objExistsURL, auth=auth, headers=headers, verify=False)
+        
+            #If we get 404 it definitely does not exist or it has a name override 
+            if (res.status_code == 404):
+                logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, objExistsURL))
+                objExists = False
+            elif (res.status_code != requests.codes.ok):
+                logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, objExistsURL, app, res.status_code, res.reason, res.text))
+            else:
+                #However the fact that we did not get a 404 does not mean it exists in the context we expect it to, perhaps it's global and from another app context?
+                #or perhaps it's app level but we're restoring a private object...
+                logger.debug("i=\"%s\" Attempting to JSON loads on %s" % (self.stanzaName, res.text))
+                resDict = json.loads(res.text)
+                for entry in resDict['entry']:
+                    sharingLevel = entry['acl']['sharing']
+                    appContext = entry['acl']['app']
+                    appScope = False
+                    userScope = False
+                    if sharing == "global" or sharing == "app":
+                        appScope = True
+                    else:
+                        userScope = True
+                    if appContext == app and appScope == True and (sharingLevel == 'app' or sharingLevel == 'global'):
+                        objExists = True
+                    elif appContext == app and userScope == True and sharingLevel == "user":
+                        objExists = True
+                logger.debug("i=\"%s\" app=%s objExists=%s after re-checking on %s" % (self.stanzaName, app, objExists, objExistsURL))
+        
         #This is an existing object we are modifying
         if objExists == True:
             url = url + "/" + name
             del config["name"]
+            
+            #Cannot post type/stanza when updating field extractions or a few other object types, but require them for creation?!
+            if 'type' in config:
+                del config['type']
+            if 'stanza' in config:
+                del config['stanza']
         
         #Hack to handle the times (conf-times) not including required attributes for creation in existing entries
         #not sure how this happens but it fails to create in 7.0.5 but works fine in 7.2.x, fixing for the older versions
         if type=="times_conf-times" and not payload.has_key("is_sub_menu"):
             payload["is_sub_menu"] = "0"
+        elif type=="collections_kvstore" and 'disabled' in payload:
+            del payload['disabled']
         
-        logger.debug("i=\"%s\" Attempting to create or update type=%s with name=%s on URL=%s with payload=\"%s\" in app=%s" % (self.stanzaName, type, name, url, payload, app))
+        logger.debug("i=\"%s\" Attempting to %s type=%s with name=%s on URL=%s with payload=\"%s\" in app=%s" % (self.stanzaName, createOrUpdate, type, name, url, payload, app))
         res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
         if (res.status_code != requests.codes.ok and res.status_code != 201):
-            logger.error("i=\"%s\" name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, name, type, url, res.status_code, res.reason, res.text, app, owner))
+            logger.error("i=\"%s\" user=%s, name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, user, name, type, url, res.status_code, res.reason, res.text, app, owner))
             #Saved Searches sometimes fail due to the VSID field, auto-retry in case that solves the problem...
             if type=="savedsearches":
                 if 'vsid' in payload:
                     del payload['vsid']
                     res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
                     if (res.status_code != requests.codes.ok and res.status_code != 201):
-                        logger.error("i=\"%s\" Re-attempted without vsid but result for name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, name, type, url, res.status_code, res.reason, res.text, app, owner))
+                        logger.error("i=\"%s\" user=%s, re-attempted without vsid but result for name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, user, name, type, url, res.status_code, res.reason, res.text, app, owner))
                     else:
-                        logger.info("i=\"%s\" name=%s of type=%s with URL=%s successfully created with the vsid field removed, feel free to ignore the previous error" % (self.stanzaName, name, type, url))
+                        logger.info("i=\"%s\" user=%s, name=%s of type=%s with URL=%s successfully %s with the vsid field removed, feel free to ignore the previous error" % (self.stanzaName, user, name, type, url, createOrUpdate))
         else:
-            logger.debug("i=\"%s\" name=%s of type=%s in app=%s with URL=%s result=\"%s\" owner=%s" % (self.stanzaName, name, type, app, url, res.text, owner))
+            logger.debug("i=\"%s\" %s name=%s of type=%s in app=%s with URL=%s result=\"%s\" owner=%s" % (self.stanzaName, createOrUpdate, name, type, app, url, res.text, owner))
             
             #Parse the result to find re-confirm the URL and check for messages from Splunk (and log warnings about them)
             root = ET.fromstring(res.text)
@@ -361,11 +419,11 @@ class SplunkVersionControlRestore:
             
             #If re-own fails log this for investigation
             if (res.status_code != requests.codes.ok):
-                logger.error("i=\"%s\" name=%s of type=%s in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (self.stanzaName, name, type, app, url, res.status_code, res.reason, res.text, owner))
+                logger.error("i=\"%s\" user=%s, name=%s of type=%s in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (self.stanzaName, user, name, type, app, url, res.status_code, res.reason, res.text, owner))
             else:
-                logger.debug("i=\"%s\" name=%s of type=%s in app=%s, ownership changed with response=\"%s\", owner=%s, sharing=%s" % (self.stanzaName, name, type, app, res.text, owner, sharing))
+                logger.debug("i=\"%s\" user=%s, name=%s of type=%s in app=%s, ownership changed with response=\"%s\", owner=%s, sharing=%s" % (self.stanzaName, user, name, type, app, res.text, owner, sharing))
         
-        logger.info("i=\"%s\" Created name=%s of type=%s in app=%s owner=%s sharing=%s" % (self.stanzaName, name, type, app, owner, sharing))
+        logger.info("i=\"%s\" %s name=%s of type=%s in app=%s owner=%s sharing=%s" % (self.stanzaName, createOrUpdate, name, type, app, owner, sharing))
 
     ###########################
     #
@@ -731,7 +789,7 @@ class SplunkVersionControlRestore:
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, query, earliest_time="-1h"):
         url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s query=\"%s\"" % (self.stanzaName, url, self.destUsername, query))
+        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\"" % (self.stanzaName, url, self.destUsername, query))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot", "earliest_time" : earliest_time }
         
         #no destUsername, use the session_key method    
@@ -747,6 +805,14 @@ class SplunkVersionControlRestore:
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
         
+        #Log return messages from Splunk, often these advise of an issue but not always...
+        if len(res["messages"]) > 0:
+            firstMessage = res["messages"][0]
+            if 'type' in firstMessage and firstMessage['type'] == "INFO":
+                #This is a harmless info message ,most other messages are likely an issue
+                logger.info("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
+            else:
+                logger.warn("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
         return res
 
     ###########################
@@ -799,12 +865,14 @@ class SplunkVersionControlRestore:
         
         knownAppList = []
         self.gitTempDir = config['gitTempDir']
-        if os.path.isdir(self.gitTempDir):
+        dirExists = os.path.isdir(self.gitTempDir)
+        if dirExists and len(os.listdir(self.gitTempDir)) != 0:
             #include the subdirectory which is the git repo
             self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
         else:
-            #make the directory and clone under here
-            os.mkdir(self.gitTempDir)
+            if not dirExists:
+                #make the directory and clone under here
+                os.mkdir(self.gitTempDir)
             #Initially we must trust our remote repo URL
             (output, stderrout, res) = self.runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")])
             if res == False:
