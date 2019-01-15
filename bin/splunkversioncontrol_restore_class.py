@@ -396,13 +396,14 @@ class SplunkVersionControlRestore:
             
             #Parse the result to find re-confirm the URL and check for messages from Splunk (and log warnings about them)
             root = ET.fromstring(res.text)
+            objURL = None
             for child in root:
                 #Working per entry in the results
                 if child.tag.endswith("entry"):
                     #Down to each entry level
                     for innerChild in child:
                         #print innerChild.tag
-                        if innerChild.tag.endswith("link") and innerChild.attrib["rel"]=="remove":
+                        if innerChild.tag.endswith("link") and innerChild.attrib["rel"]=="list":
                             objURL = "%s/%s" % (self.splunk_rest, innerChild.attrib["href"])
                             logger.debug("i=\"%s\" name=%s of type=%s in app=%s URL=%s" % (self.stanzaName, name, type, app, objURL))
                 elif child.tag.endswith("messages"):
@@ -410,6 +411,10 @@ class SplunkVersionControlRestore:
                         if innerChild.tag.endswith("msg") and innerChild.attrib["type"]=="ERROR" or innerChild.attrib.has_key("WARN"):
                             logger.warn("i=\"%s\" name=%s of type=%s in app=%s had a warn/error message of '%s' owner=%s" % (self.stanzaName, name, type, app, innerChild.text, owner))
                             #Sometimes the object appears to be create but is unusable which is annoying, at least provide the warning to the logs
+            
+            if not objURL:
+                logger.warn("i=\"%s\" never found objURL so cannot complete ACL change with url=%s, response text=\"%s\" when looking for name=%s, type=%s app=%s, owner=%s" % (self.stanzaName, url, res.text, name, type, app, owner))
+                return
             
             #Re-owning it to the previous owner and sharing level
             url = "%s/acl" % (objURL)
