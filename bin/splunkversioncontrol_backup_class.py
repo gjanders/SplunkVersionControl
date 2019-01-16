@@ -85,6 +85,7 @@ class SplunkVersionControlBackup:
             session_key = root.getElementsByTagName("session_key")[0].firstChild.data
             #Grab the session key in case we need it
             config['session_key'] = session_key
+            config['checkpoint_dir'] = root.getElementsByTagName("checkpoint_dir")[0].firstChild.data
             conf_node = root.getElementsByTagName("configuration")[0]
             if conf_node:
                 logger.debug("XML: found configuration")
@@ -146,7 +147,7 @@ class SplunkVersionControlBackup:
                     if innerChild.tag.endswith("title"):
                         name = innerChild.text
                         appList.append(name)
-                        logger.debug("i=\"%s\" name=%s is the app added to the list" % (self.stanzaName, name))
+                        logger.debug("i=\"%s\" name=\"%s\" is the app added to the list" % (self.stanzaName, name))
         return appList
         
     ###########################
@@ -197,16 +198,16 @@ class SplunkVersionControlBackup:
                         if 'name' in aliasAttributes.values():
                             info["origName"] = title
                         
-                        logger.debug("i=\"%s\" name=%s is the entry for type=%s in app=%s" % (self.stanzaName, title, type, app))
+                        logger.debug("i=\"%s\" name=\"%s\" is the entry for type=%s in app=%s" % (self.stanzaName, title, type, app))
                         #If we have an include/exclude list we deal with that scenario now
                         if self.includeEntities:
                             if not title in self.includeEntities:
-                                logger.debug("i=\"%s\" name=%s of type=%s not in includeEntities list in app=%s" % (self.stanzaName, info["name"], type, app))
+                                logger.debug("i=\"%s\" name=\"%s\" of type=%s not in includeEntities list in app=%s" % (self.stanzaName, info["name"], type, app))
                                 keep = False
                                 break
                         if self.excludeEntities:
                             if title in self.excludeEntities:
-                                logger.debug("i=\"%s\" name=%s of type=%s in excludeEntities list in app=%s" % (self.stanzaName, info["name"], type, app))
+                                logger.debug("i=\"%s\" name=\"%s\" of type=%s in excludeEntities list in app=%s" % (self.stanzaName, info["name"], type, app))
                                 keep = False
                                 break
                     #Content apepars to be where 90% of the data we want is located
@@ -217,18 +218,18 @@ class SplunkVersionControlBackup:
                             if theAttribute.attrib['name'] == 'eai:acl':
                                 for theList in theAttribute[0]:
                                     if theList.attrib['name'] == 'sharing':
-                                        logger.debug("i=\"%s\" name=%s of type=%s has sharing=%s in app=%s" % (self.stanzaName, info["name"], type, theList.text, app))
+                                        logger.debug("i=\"%s\" name=\"%s\" of type=%s has sharing=%s in app=%s" % (self.stanzaName, info["name"], type, theList.text, app))
                                         info["sharing"] = theList.text
                                         if self.noPrivate and info["sharing"] == "user":
-                                            logger.debug("i=\"%s\" name=%s of type=%s found but the noPrivate flag is true, excluding this in app=%s" % (self.stanzaName, info["name"], type, app))
+                                            logger.debug("i=\"%s\" name=\"%s\" of type=%s found but the noPrivate flag is true, excluding this in app=%s" % (self.stanzaName, info["name"], type, app))
                                             keep = False
                                             break
                                     elif theList.attrib['name'] == 'app':
                                         foundApp = theList.text
-                                        logger.debug("i=\"%s\" name=%s of type=%s in app context of app=%s belongs to app=%s" % (self.stanzaName, info["name"], type, app, foundApp))
+                                        logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context of app=%s belongs to app=%s" % (self.stanzaName, info["name"], type, app, foundApp))
                                         #We can see globally shared objects in our app context, it does not mean we should migrate them as it's not ours...
                                         if app != foundApp:
-                                            logger.debug("i=\"%s\" name=%s of type=%s found in app context of app=%s belongs to app context app=%s, excluding from app=%s" % (self.stanzaName, info["name"], type, app, foundApp, app))
+                                            logger.debug("i=\"%s\" name=\"%s\" of type=%s found in app context of app=%s belongs to app context app=%s, excluding from app=%s" % (self.stanzaName, info["name"], type, app, foundApp, app))
                                             keep = False
                                             break
                                     #owner is seen as a nicer alternative to the author variable
@@ -238,15 +239,15 @@ class SplunkVersionControlBackup:
                                         #If we have include or exlcude owner lists we deal with this now
                                         if self.includeOwner:
                                             if not owner in self.includeOwner:
-                                                logger.debug("i=\"%s\" name=%s of type=%s with owner=%s not in includeOwner list in app=%s" % (self.stanzaName, info["name"], type, owner, app))
+                                                logger.debug("i=\"%s\" name=\"%s\" of type=%s with owner=%s not in includeOwner list in app=%s" % (self.stanzaName, info["name"], type, owner, app))
                                                 keep = False
                                                 break
                                         if self.excludeOwner:
                                             if owner in self.excludeOwner:
-                                                logger.debug("i=\"%s\" name=%s of type=%s with owner=%s in excludeOwner list in app=%s" % (self.stanzaName, info["name"], type, owner, app))
+                                                logger.debug("i=\"%s\" name=\"%s\" of type=%s with owner=%s in excludeOwner list in app=%s" % (self.stanzaName, info["name"], type, owner, app))
                                                 keep = False
                                                 break
-                                        logger.debug("i=\"%s\" name=%s of type=%s has owner=%s in app=%s" % (self.stanzaName, info["name"], type, owner, app))
+                                        logger.debug("i=\"%s\" name=\"%s\" of type=%s has owner=%s in app=%s" % (self.stanzaName, info["name"], type, owner, app))
                                         info["owner"] = owner
 
                             else:
@@ -259,7 +260,7 @@ class SplunkVersionControlBackup:
                                 
                                 #If it's disabled *and* we don't want disabled objects we can determine this here
                                 if attribName == "disabled" and self.noDisabled and theAttribute.text == "1":
-                                    logger.debug("i=\"%s\" name=%s of type=%s is disabled and the noDisabled flag is true, excluding this in app=%s" % (self.stanzaName, info["name"], type, app))
+                                    logger.debug("i=\"%s\" name=\"%s\" of type=%s is disabled and the noDisabled flag is true, excluding this in app=%s" % (self.stanzaName, info["name"], type, app))
                                     keep = False
                                     break
                                     
@@ -268,7 +269,7 @@ class SplunkVersionControlBackup:
                                 if valueAliases.has_key(theAttribute.text):
                                     theAttribute.text = valueAliases[theAttribute.text]
                                 
-                                logger.debug("i=\"%s\" name=%s of type=%s found key/value of %s=%s in app context app=%s" % (self.stanzaName, info["name"], type, attribName, theAttribute.text, app))
+                                logger.debug("i=\"%s\" name=\"%s\" of type=%s found key/value of %s=%s in app context app=%s" % (self.stanzaName, info["name"], type, attribName, theAttribute.text, app))
 
                                 #Yet another hack, this time to deal with collections using accelrated_fields.<value> when looking at it via REST GET requests, but
                                 #requiring accelerated_fields to be used when POST'ing the value to create the collection!
@@ -288,7 +289,7 @@ class SplunkVersionControlBackup:
 
                                     for field in fieldCopy:
                                         name = field['fieldName']
-                                        logger.debug("i=\"%s\" name=%s" % (self.stanzaName, name))
+                                        logger.debug("i=\"%s\" name=\"%s\"" % (self.stanzaName, name))
                                         if name != "RootObject":
                                             index = fields.index(field)
                                             del fields[index]
@@ -312,13 +313,13 @@ class SplunkVersionControlBackup:
                         #as in the name is prepended with EXTRACT-, REPORT- or LOOKUP-, we need to remove this before creating
                         #the new version
                         if type=="fieldextractions" and info["name"].find("EXTRACT-") == 0:
-                            logger.debug("i=\"%s\" Overriding name of name=%s of type=%s in app context app=%s with owner=%s to new name of newname=%s" % (self.stanzaName, info["name"], type, app, info["owner"], info["name"][8:]))
+                            logger.debug("i=\"%s\" Overriding name of name=\"%s\" of type=%s in app context app=%s with owner=%s to new name of newname=\"%s\"" % (self.stanzaName, info["name"], type, app, info["owner"], info["name"][8:]))
                             info["name"] = info["name"][8:]
                         elif type=="fieldextractions" and info["name"].find("REPORT-") == 0:
-                            logger.debug("i=\"%s\" Overriding name of name=%s of type=%s in app context app=%s with owner=%s to new name of newname=%s" % (self.stanzaName, info["name"], type, app, info["owner"], info["name"][7:]))
+                            logger.debug("i=\"%s\" Overriding name of name=\"%s\" of type=%s in app context app=%s with owner=%s to new name of newname=\"%s\"" % (self.stanzaName, info["name"], type, app, info["owner"], info["name"][7:]))
                             info["name"] = info["name"][7:]
                         elif type=="automatic lookup" and info["name"].find("LOOKUP-") == 0:
-                            logger.debug("i=\"%s\" Overriding name of name=%s of type=%s in app context app=%s with owner=%s to new name of newname=%s" % (self.stanzaName, info["name"], type, app, info["owner"], info["name"][7:]))
+                            logger.debug("i=\"%s\" Overriding name of name=\"%s\" of type=%s in app context app=%s with owner=%s to new name of newname=\"%s\"" % (self.stanzaName, info["name"], type, app, info["owner"], info["name"][7:]))
                             info["name"] = info["name"][7:]
                     
                     #Some attributes are not used to create a new version so we remove them...(they may have been used above first so we kept them until now)
@@ -333,10 +334,10 @@ class SplunkVersionControlBackup:
                         
                     #REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
                     if type == "fieldtransformations" and info.has_key("FORMAT") and info["FORMAT"] == "nullQueue":
-                        logger.info("i=\"%s\" Dropping the backup of name=%s of type=%s in app context app=%s with owner=%s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (self.stanzaName, info["name"], type, app, info["owner"]))
+                        logger.info("i=\"%s\" Dropping the backup of name=\"%s\" of type=%s in app context app=%s with owner=%s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     else:
                         infoList[sharing].append(info)
-                        logger.info("i=\"%s\" Recording name=%s info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
+                        logger.info("i=\"%s\" Recording name=\"%s\" info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
         
                     creationSuccess.append(info["name"])
         
@@ -415,16 +416,16 @@ class SplunkVersionControlBackup:
                     if innerChild.tag.endswith("title"):
                         title = innerChild.text
                         macroInfo["name"] = title
-                        logger.debug("i=\"%s\" Found type=macro title, name=%s in app=%s" % (self.stanzaName, title, app))
+                        logger.debug("i=\"%s\" Found type=macro title, name=\"%s\" in app=%s" % (self.stanzaName, title, app))
                         #Deal with the include/exclude lists
                         if self.includeEntities:
                             if not title in self.includeEntities:
-                                logger.debug("i=\"%s\" name=%s of type=macro not in includeEntities list in app=%s" % (self.stanzaName, macroInfo["name"], app))
+                                logger.debug("i=\"%s\" name=\"%s\" of type=macro not in includeEntities list in app=%s" % (self.stanzaName, macroInfo["name"], app))
                                 keep = False
                                 break
                         if self.excludeEntities:
                             if title in self.excludeEntities:
-                                logger.debug("i=\"%s\" name=%s of type=macro in excludeEntities list in app=%s" % (self.stanzaName, macroInfo["name"], app))
+                                logger.debug("i=\"%s\" name=\"%s\" of type=macro in excludeEntities list in app=%s" % (self.stanzaName, macroInfo["name"], app))
                                 keep = False
                                 break
                     #Content apepars to be where 90% of the data we want is located
@@ -435,12 +436,12 @@ class SplunkVersionControlBackup:
                             if theAttribute.attrib['name'] == 'eai:acl':
                                 for theList in theAttribute[0]:
                                     if theList.attrib['name'] == 'sharing':
-                                        logger.debug("i=\"%s\" name=%s of type=macro sharing=%s in app=%s" % (self.stanzaName, macroInfo["name"], theList.text, app))
+                                        logger.debug("i=\"%s\" name=\"%s\" of type=macro sharing=%s in app=%s" % (self.stanzaName, macroInfo["name"], theList.text, app))
                                         macroInfo["sharing"] = theList.text
                                         
                                         #If we are excluding private then check the sharing is not user level (private in the GUI)
                                         if self.noPrivate and macroInfo["sharing"] == "user":
-                                            logger.debug("i=\"%s\" name=%s of type=macro found but the noPrivate flag is true, excluding this in app=%s" % (self.stanzaName, macroInfo["name"], app))
+                                            logger.debug("i=\"%s\" name=\"%s\" of type=macro found but the noPrivate flag is true, excluding this in app=%s" % (self.stanzaName, macroInfo["name"], app))
                                             keep = False
                                             break
                                     elif theList.attrib['name'] == 'app':
@@ -448,22 +449,22 @@ class SplunkVersionControlBackup:
                                         foundApp = theList.text
                                         #We can see globally shared objects in our app context, it does not mean we should migrate them as it's not ours...
                                         if app != foundApp:
-                                            logger.debug("i=\"%s\" name=%s of type macro found in app context of app=%s, belongs to app context app=%s, excluding it" % (self.stanzaName, macroInfo["name"], app, foundApp))
+                                            logger.debug("i=\"%s\" name=\"%s\" of type macro found in app context of app=%s, belongs to app context app=%s, excluding it" % (self.stanzaName, macroInfo["name"], app, foundApp))
                                             keep = False
                                             break
                                     #owner is used as a nicer alternative to the author
                                     elif theList.attrib['name'] == 'owner':
                                         macroInfo["owner"] = theList.text
                                         owner = theList.text
-                                        logger.debug("i=\"%s\" name=%s of type=macro owner=%s" % (self.stanzaName, macroInfo["name"], owner))
+                                        logger.debug("i=\"%s\" name=\"%s\" of type=macro owner=%s" % (self.stanzaName, macroInfo["name"], owner))
                                         if self.includeOwner:
                                             if not owner in self.includeOwner:
-                                                logger.debug("i=\"%s\" name=%s of type=macro with owner=%s not in includeOwner list in app=%s" % (self.stanzaName, macroInfo["name"], owner, app))
+                                                logger.debug("i=\"%s\" name=\"%s\" of type=macro with owner=%s not in includeOwner list in app=%s" % (self.stanzaName, macroInfo["name"], owner, app))
                                                 keep = False
                                                 break
                                         if self.excludeOwner:
                                             if owner in self.excludeOwner:
-                                                logger.debug("i=\"%s\" name=%s of type=macro with owner=%s in excludeOwner list in app=%s" % (self.stanzaName, macroInfo["name"], owner, app))
+                                                logger.debug("i=\"%s\" name=\"%s\" of type=macro with owner=%s in excludeOwner list in app=%s" % (self.stanzaName, macroInfo["name"], owner, app))
                                                 keep = False
                                                 break
                             else:
@@ -471,14 +472,14 @@ class SplunkVersionControlBackup:
                                 attribName = theAttribute.attrib['name']
                                 #Check if we have hit hte disabled attribute and we have a noDisabled flag
                                 if attribName == "disabled" and self.noDisabled and theAttribute.text == "1":
-                                    logger.debug("i=\"%s\" noDisabled flag is true, name=%s of type=macro is disabled, excluded in app=%s" % (self.stanzaName, theAttribute.attrib['name'], app))
+                                    logger.debug("i=\"%s\" noDisabled flag is true, name=\"%s\" of type=macro is disabled, excluded in app=%s" % (self.stanzaName, theAttribute.attrib['name'], app))
                                     keep = False
                                     break
                                 else:
                                     #Otherwise we want this attribute
                                     attribName = theAttribute.attrib['name']
                                     #Some attributes do not work with the REST API or should not be migrated...
-                                    logger.debug("i=\"%s\" name=%s of type=macro key/value pair of %s=%s in app=%s" % (self.stanzaName, macroInfo["name"], attribName, theAttribute.text, app))
+                                    logger.debug("i=\"%s\" name=\"%s\" of type=macro key/value pair of %s=%s in app=%s" % (self.stanzaName, macroInfo["name"], attribName, theAttribute.text, app))
                                     macroInfo[attribName] = theAttribute.text
                 if keep:
                     #Add this to the infoList
@@ -486,7 +487,7 @@ class SplunkVersionControlBackup:
                     if not macros.has_key(sharing):
                         macros[sharing] = []
                     macros[sharing].append(macroInfo)
-                    logger.info("i=\"%s\" Recording macro info for name=%s in app=%s with owner=%s sharing=%s" % (self.stanzaName, macroInfo["name"], app, macroInfo["owner"], macroInfo["sharing"]))
+                    logger.info("i=\"%s\" Recording macro info for name=\"%s\" in app=%s with owner=%s sharing=%s" % (self.stanzaName, macroInfo["name"], app, macroInfo["owner"], macroInfo["sharing"]))
                     macroCreationSuccess.append(macroInfo["name"])
 
         #Find the storage directory for this app and create if required
@@ -942,7 +943,7 @@ class SplunkVersionControlBackup:
         
         if 'remoteAppName' in config:
             self.appName = config['remoteAppName']
-         
+        
         self.gitRepoURL = config['gitRepoURL']
         
         #From server
@@ -985,47 +986,52 @@ class SplunkVersionControlBackup:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
         
-        #Version Control File to record when we last ran
-        versionControlFile = "splunkversioncontrol_lastrunepoch"
-        res = self.runSearchJob("| inputlookup %s" % (versionControlFile))
-        resList = res["results"]
         lastRunEpoch = None
-
         appsWithChanges = None
-        if len(resList) == 0:
-            logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
+        #Version Control File to record when we last ran
+        versionControlFile = "%s/splunkversioncontrol_lastrunepoch_%s" % (config['checkpoint_dir'], self.stanzaName)
+        if os.path.isfile(versionControlFile):
+            logging.debug("i=\"%s\" reading file=%s to determine checkpoint" % (self.stanzaName, versionControlFile))
+            fileH = open(versionControlFile, "r")
+            lastRunEpoch = fileH.readlines()
+            logging.debug("i=\"%s\" from file=%s found these lines %s" % (self.stanzaName, versionControlFile, lastRunEpoch))
+            fileH.close()
+            if len(lastRunEpoch) != 1:
+                logging.warn("i=\"%s\" from file=%s no lines found!? Running against all apps now" % (self.stanzaName, versionControlFile))
+            else:
+                lastRunEpoch = lastRunEpoch[0].strip()
+                appsWithChanges = {}
+                logger.info("i=\"%s\" %s reports a lastrun_epoch=%s using this date in report calls" % (self.stanzaName, versionControlFile, lastRunEpoch))
+                
+                #Run a query to determine which apps/types of knowledge objects have changed since the last run
+                res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Directory\" updatedEpoch=%s" % (lastRunEpoch))
+                resList = res["results"]
+                if len(resList) > 0:
+                    for aRes in resList:
+                        app = aRes["app"]
+                        type = aRes["type"]
+                        logger.debug("i=\"%s\" Found changes to app=%s of type=%s" % (self.stanzaName, app, type))
+                        
+                        if not app in appsWithChanges:
+                            appsWithChanges[app] = []
+                        appsWithChanges[app].append(type)
+
+                #Run a query to determine which apps/types of knowledge objects have changed since the last run
+                res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Non-Directory\" updatedEpoch=%s" % (lastRunEpoch))
+                resList = res["results"]
+                if len(resList) > 0:
+                    for aRes in resList:
+                        app = aRes["app"]
+                        type = aRes["type"]
+                        
+                        logger.debug("i=\"%s\" Found changes to app=%s of type=%s" % (self.stanzaName, app, type))
+                        
+                        if not app in appsWithChanges:
+                            appsWithChanges[app] = []
+                        appsWithChanges[app].append(type)
         else:
-            appsWithChanges = {}
-            lastRunEpoch = resList[0]["earliest"]
-            logger.info("i=\"%s\" %s reports a lastrun_epoch=%s using this date in report calls" % (self.stanzaName, versionControlFile, lastRunEpoch))
-            
-            #Run a query to determine which apps/types of knowledge objects have changed since the last run
-            res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Directory\" updatedEpoch=%s" % (lastRunEpoch))
-            resList = res["results"]
-            if len(resList) > 0:
-                for aRes in resList:
-                    app = aRes["app"]
-                    type = aRes["type"]
-                    logger.debug("i=\"%s\" Found changes to app=%s of type=%s" % (self.stanzaName, app, type))
-                    
-                    if not app in appsWithChanges:
-                        appsWithChanges[app] = []
-                    appsWithChanges[app].append(type)
-
-            #Run a query to determine which apps/types of knowledge objects have changed since the last run
-            res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Non-Directory\" updatedEpoch=%s" % (lastRunEpoch))
-            resList = res["results"]
-            if len(resList) > 0:
-                for aRes in resList:
-                    app = aRes["app"]
-                    type = aRes["type"]
-                    
-                    logger.debug("i=\"%s\" Found changes to app=%s of type=%s" % (self.stanzaName, app, type))
-                    
-                    if not app in appsWithChanges:
-                        appsWithChanges[app] = []
-                    appsWithChanges[app].append(type)
-
+            logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
+        
         #Always start from master and the current version (just in case changes occurred)
         (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=20)
         if res == False:
@@ -1035,7 +1041,7 @@ class SplunkVersionControlBackup:
         knownAppList = os.listdir(self.gitTempDir)
         logger.debug("i=\"%s\" Known app list is %s" % (self.stanzaName, knownAppList))
 
-        for app in appList: 
+        for app in appList:
             macrosRun = False
             tagsRun = False
             eventtypesRun = False
@@ -1161,17 +1167,17 @@ class SplunkVersionControlBackup:
             (output, stderrout, res) = self.runOSProcess("cd {0}; git add -A; git commit -am \"Updated by Splunk Version Control backup job {1}\"; git tag {2}; git push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate), timeout=30)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
-        
-        #Output the time we did the run so we know where to continue from at next runtime
-        res = self.runSearchJob("| makeresults | eval earliest=%s | fields - _time | outputlookup %s" % (currentEpochTime, versionControlFile))       
-        logger.info("i=\"%s\" lastrun_epoch=%s written to lookup" % (self.stanzaName, currentEpochTime))
-        
-        #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
-        res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist" % (todaysDate))
+                #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
+            
+            res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist" % (todaysDate))
 
+        #Output the time we did the run so we know where to continue from at next runtime
+        with open(versionControlFile, 'w') as checkpointFile:
+            checkpointFile.write("%s" % (currentEpochTime))
+        logger.info("i=\"%s\" lastrun_epoch=%s written to checkpoint file=%s" % (self.stanzaName, currentEpochTime, versionControlFile))
         logger.info("i=\"%s\" Done" % (self.stanzaName))
     
-    #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed        
+    #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
     def runOSProcess(self, command, timeout=10):
         logger.debug("i=\"%s\" Running command=\"%s\" with timeout=%s" % (self.stanzaName, command, timeout))
         p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)

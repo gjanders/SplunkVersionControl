@@ -81,3 +81,7 @@ On a Linux-based system
 /opt/splunk/var/log/splunk/splunkversioncontrol_backup.log
 
 Or the internal index which also has these log files
+
+## Will this work on a search head cluster?
+No, modular inputs run on each member at the same time which would not work well...however you can use a standalone server to backup/restore to a search head cluster.
+You could also run the input on a single search head cluster member but this is not a recommended solution
