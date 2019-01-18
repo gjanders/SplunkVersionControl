@@ -326,6 +326,7 @@ class SplunkVersionControlRestore:
         
         #The config has an origName in it, therefore the object exists lookup may have not worked as expected
         #repeat it here for the edge cases (field extractions, field transforms and automatic lookups)
+        origName = None
         if 'origName' in config:
             origName = config['origName']
             del config['origName']
@@ -362,7 +363,11 @@ class SplunkVersionControlRestore:
         
         #This is an existing object we are modifying
         if objExists == True:
-            url = url + "/" + name
+            createOrUpdate = "update"
+            if origName:
+                url = url + "/" + origName
+            else:
+                url = url + "/" + name
             del config["name"]
             
             #Cannot post type/stanza when updating field extractions or a few other object types, but require them for creation?!

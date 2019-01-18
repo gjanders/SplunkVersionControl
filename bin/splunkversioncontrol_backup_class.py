@@ -321,7 +321,12 @@ class SplunkVersionControlBackup:
                         elif type=="automatic lookup" and info["name"].find("LOOKUP-") == 0:
                             logger.debug("i=\"%s\" Overriding name of name=\"%s\" of type=%s in app context app=%s with owner=%s to new name of newname=\"%s\"" % (self.stanzaName, info["name"], type, app, info["owner"], info["name"][7:]))
                             info["name"] = info["name"][7:]
-                    
+                        elif type=="fieldaliases":
+                            newName = info["name"]
+                            newName = newName[newName.find("FIELDALIAS-")+11:]
+                            logger.debug("Overriding name of %s of type %s in app context %s with owner %s to new name of %s" % (info["name"], type, app, info["owner"], newName))
+                            info["name"] = newName
+
                     #Some attributes are not used to create a new version so we remove them...(they may have been used above first so we kept them until now)
                     for attribName in fieldIgnoreList:
                         if info.has_key(attribName):
@@ -564,7 +569,7 @@ class SplunkVersionControlBackup:
         
     def fieldaliases(self, app):
         ignoreList = [ "attribute", "type", "value" ]
-        return self.runQueries(app, "/data/props/fieldaliases", "fieldaliases", ignoreList)
+        return self.runQueries(app, "/data/props/fieldaliases", "fieldaliases", ignoreList, nameOverride="name")
 
     def fieldextractions(self, app):
         ignoreList = [ "attribute" ]
