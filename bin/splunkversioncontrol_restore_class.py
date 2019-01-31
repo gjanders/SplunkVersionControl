@@ -889,7 +889,7 @@ class SplunkVersionControlRestore:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             #Clone the remote git repo
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=30)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=120)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -907,7 +907,7 @@ class SplunkVersionControlRestore:
             logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
             #Do a git pull to ensure we are up-to-date
-            (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=30)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=120)
             if res == False:
                 logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
