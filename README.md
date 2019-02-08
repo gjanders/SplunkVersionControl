@@ -82,6 +82,12 @@ On a Linux-based system
 
 Or the internal index which also has these log files
 
+## Troubleshooting
+In some Linux OS distributions an error similar to `OPENSSL_1.0.0 not found` may appear, `os.unsetenv('LD_LIBRARY_PATH')` appears to fix this however AppInspect does not allow modification of OS environment variables.
+
+If you have this issue please add this into the python files to workaround the problem as required
+Refer to [this issue on github](https://github.com/gjanders/SplunkVersionControl/issues/3) for more details
+
 ## Will this work on a search head cluster?
 No, modular inputs run on each member at the same time which would not work well...however you can use a standalone server to backup/restore to a search head cluster.
 You could also run the input on a single search head cluster member but this is not a recommended solution

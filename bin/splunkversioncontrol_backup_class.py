@@ -360,7 +360,7 @@ class SplunkVersionControlBackup:
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
             with open(globalStorageDir + "/" + type, 'w') as f:
-                json.dump(infoList["global"], f)
+                json.dump(infoList["global"], f, sort_keys=True)
         if infoList.has_key("app"):
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
@@ -368,7 +368,7 @@ class SplunkVersionControlBackup:
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
             with open(appLevelStorageDir + "/" + type, 'w') as f:
-                json.dump(infoList["app"], f)
+                json.dump(infoList["app"], f, sort_keys=True)
         if infoList.has_key("user"):
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
@@ -376,7 +376,7 @@ class SplunkVersionControlBackup:
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
             with open(userLevelStorageDir + "/" + type, 'w') as f:
-                json.dump(infoList["user"], f)
+                json.dump(infoList["user"], f, sort_keys=True)
         return creationSuccess
 
     ###########################
@@ -509,7 +509,7 @@ class SplunkVersionControlBackup:
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
             with open(globalStorageDir + "/macros", 'w') as f:
-                json.dump(macros["global"], f)
+                json.dump(macros["global"], f, sort_keys=True)
         if macros.has_key("app"):
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=app in app=%s" % (self.stanzaName, app))
             #persist app level to disk
@@ -517,7 +517,7 @@ class SplunkVersionControlBackup:
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
             with open(appLevelStorageDir + "/macros", 'w') as f:
-                json.dump(macros["app"], f)
+                json.dump(macros["app"], f, sort_keys=True)
         if macros.has_key("user"):
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=user (private) in app %s" % (self.stanzaName, app))
             #persist user level to disk
@@ -525,7 +525,7 @@ class SplunkVersionControlBackup:
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
             with open(userLevelStorageDir + "/macros", 'w') as f:
-                json.dump(macros["user"], f)
+                json.dump(macros["user"], f, sort_keys=True)
             
         return macroCreationSuccess
 
