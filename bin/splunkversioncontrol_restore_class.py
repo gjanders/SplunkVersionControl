@@ -889,7 +889,7 @@ class SplunkVersionControlRestore:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             #Clone the remote git repo
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=120)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=180)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -897,6 +897,9 @@ class SplunkVersionControlRestore:
                 logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
                 logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+            
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
         
         #Version Control File that lists what restore we need to do...
         restoreList = "splunkversioncontrol_restorelist"
@@ -907,13 +910,15 @@ class SplunkVersionControlRestore:
             logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
             #Do a git pull to ensure we are up-to-date
-            (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=120)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=180)
             if res == False:
                 logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
             else:
-                logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
                 logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+            
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
             
             logger.debug("i=\"%s\" The restore list is %s" % (self.stanzaName, resList))
             
@@ -1015,9 +1020,11 @@ class SplunkVersionControlRestore:
                 if res == False:
                     logger.error("i=\"%s\" user=%s, object name=%s, type=%s, time=%s, git checkout of tag=%s failed in directory dir=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, user, name, type, time, tag, self.gitTempDir, output, stderrout))
                 else:
-                    logger.debug("i=\"%s\" result from git command=%s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
                     logger.info("i=\"%s\" Successfully ran the git checkout for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
-
+                
+                if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+                    logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+                
                 knownAppList = []
                 if os.path.isdir(self.gitTempDir):
                     #include the subdirectory which is the git repo
@@ -1087,6 +1094,7 @@ class SplunkVersionControlRestore:
             if p.poll() is not None:
                 #return p.communicate()
                 (stdoutdata, stderrdata) = p.communicate()
+                logger.debug("command=\"%s\", output=\"%s\", stderrout=\"%s\"" % (command, stdoutdata, stderrdata))
                 if p.returncode != 0:
                     return stdoutdata, stderrdata, False
                 else:

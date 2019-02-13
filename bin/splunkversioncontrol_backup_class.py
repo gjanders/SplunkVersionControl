@@ -987,9 +987,11 @@ class SplunkVersionControlBackup:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
             else:
-                logger.debug("i=\"%s\" result from git command=%s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+            
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout)) 
         
         lastRunEpoch = None
         appsWithChanges = None
@@ -1041,7 +1043,10 @@ class SplunkVersionControlBackup:
         (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=120)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
-
+        
+        if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+            logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+        
         knownAppList = []
         knownAppList = os.listdir(self.gitTempDir)
         logger.debug("i=\"%s\" Known app list is %s" % (self.stanzaName, knownAppList))
@@ -1163,7 +1168,10 @@ class SplunkVersionControlBackup:
         (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=120)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
-            
+        
+        if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+            logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+        
         #At this point we've written out the potential updates
         (output, stderrout, res) = self.runOSProcess("cd %s; git status | grep \"nothing to commit\"" % (self.gitTempDir))
         if res == False:
@@ -1172,8 +1180,11 @@ class SplunkVersionControlBackup:
             (output, stderrout, res) = self.runOSProcess("cd {0}; git add -A; git commit -am \"Updated by Splunk Version Control backup job {1}\"; git tag {2}; git push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate), timeout=120)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
-                #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
             
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+            
+            #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
             res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist" % (todaysDate))
 
         #Output the time we did the run so we know where to continue from at next runtime
@@ -1191,6 +1202,7 @@ class SplunkVersionControlBackup:
             if p.poll() is not None:
                 #return p.communicate()
                 (stdoutdata, stderrdata) = p.communicate()
+                logger.debug("command=\"%s\", output=\"%s\", stderrout=\"%s\"" % (command, stdoutdata, stderrdata))
                 if p.returncode != 0:
                     return stdoutdata, stderrdata, False
                 else:
