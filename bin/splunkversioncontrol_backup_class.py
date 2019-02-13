@@ -968,6 +968,8 @@ class SplunkVersionControlBackup:
         self.removeExcludedApps(appList)
         logger.debug("i=\"%s\" AppList is (post trim) %s" % (self.stanzaName, appList))
 
+        gitFailure = False
+        
         self.gitTempDir = config['gitTempDir']
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
@@ -991,7 +993,8 @@ class SplunkVersionControlBackup:
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
             
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
-                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout)) 
+                logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
+                gitFailure = True
         
         lastRunEpoch = None
         appsWithChanges = None
@@ -1045,7 +1048,8 @@ class SplunkVersionControlBackup:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
         
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
-            logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+            logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
+            gitFailure = True
         
         knownAppList = []
         knownAppList = os.listdir(self.gitTempDir)
@@ -1170,7 +1174,8 @@ class SplunkVersionControlBackup:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
         
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
-            logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+            logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
+            gitFailure = True
         
         #At this point we've written out the potential updates
         (output, stderrout, res) = self.runOSProcess("cd %s; git status | grep \"nothing to commit\"" % (self.gitTempDir))
@@ -1182,15 +1187,21 @@ class SplunkVersionControlBackup:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
-                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
-            
+                logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
+                gitFailure = True
             #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
             res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist" % (todaysDate))
 
-        #Output the time we did the run so we know where to continue from at next runtime
-        with open(versionControlFile, 'w') as checkpointFile:
-            checkpointFile.write("%s" % (currentEpochTime))
-        logger.info("i=\"%s\" lastrun_epoch=%s written to checkpoint file=%s" % (self.stanzaName, currentEpochTime, versionControlFile))
+        if not gitFailure:
+            #Output the time we did the run so we know where to continue from at next runtime
+            with open(versionControlFile, 'w') as checkpointFile:
+                checkpointFile.write("%s" % (currentEpochTime))
+            logger.info("i=\"%s\" lastrun_epoch=%s written to checkpoint file=%s" % (self.stanzaName, currentEpochTime, versionControlFile))
+        else:
+            logger.error("i=\"%s\" git failure occurred during runtime, not updating the epoch value. This failure  may require investigation, please refer to the WARNING messages in the logs" % (self.stanzaName))
+            logger.warn("i=\"%s\" wiping the git directory, dir=%s to allow re-cloning on next run of the script" % (self.stanzaName, self.gitTempDir))
+            shutil.rmtree(self.gitTempDir)
+        
         logger.info("i=\"%s\" Done" % (self.stanzaName))
     
     #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed

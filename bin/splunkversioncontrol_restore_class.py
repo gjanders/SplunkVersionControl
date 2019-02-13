@@ -14,6 +14,7 @@ import xml.dom.minidom
 import datetime
 from time import sleep
 from subprocess import Popen, PIPE
+import shutil
 
 ###########################
 #
@@ -875,6 +876,9 @@ class SplunkVersionControlRestore:
         
         knownAppList = []
         self.gitTempDir = config['gitTempDir']
+        
+        gitFailure = False
+        
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
             #include the subdirectory which is the git repo
@@ -899,7 +903,8 @@ class SplunkVersionControlRestore:
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
             
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
-                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+                logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
+                gitFailure = True
         
         #Version Control File that lists what restore we need to do...
         restoreList = "splunkversioncontrol_restorelist"
@@ -918,7 +923,8 @@ class SplunkVersionControlRestore:
                 logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
             
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
-                logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+                logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
+                gitFailure = True
             
             logger.debug("i=\"%s\" The restore list is %s" % (self.stanzaName, resList))
             
@@ -1023,7 +1029,8 @@ class SplunkVersionControlRestore:
                     logger.info("i=\"%s\" Successfully ran the git checkout for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 
                 if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
-                    logger.warn("error/fatal messages in git output please review. stderrout=\"%s\"" % (stderrout))
+                    logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
+                    gitFailure = True
                 
                 knownAppList = []
                 if os.path.isdir(self.gitTempDir):
@@ -1080,8 +1087,13 @@ class SplunkVersionControlRestore:
 
         #Wipe the lookup file so we do not attempt to restore these entries again
         if len(resList) != 0:
-            res = self.runSearchJob("| makeresults | fields - _time | outputlookup %s" % (restoreList))
-            logger.info("i=\"%s\" Cleared the lookup file to ensure we do not attempt to restore the same entries again" % (self.stanzaName))
+            if not gitFailure:
+                res = self.runSearchJob("| makeresults | fields - _time | outputlookup %s" % (restoreList))
+                logger.info("i=\"%s\" Cleared the lookup file to ensure we do not attempt to restore the same entries again" % (self.stanzaName))
+            else:
+                logger.error("i=\"%s\" git failure occurred during runtime, not wiping the lookup value. This failure  may require investigation, please refer to the WARNING messages in the logs" % (self.stanzaName))
+                logger.warn("i=\"%s\" wiping the git directory, dir=%s to allow re-cloning on next run of the script" % (self.stanzaName, self.gitTempDir))
+                shutil.rmtree(self.gitTempDir)
         
         logger.info("i=\"%s\" Done" % (self.stanzaName))
     
