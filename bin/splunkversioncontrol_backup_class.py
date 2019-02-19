@@ -11,7 +11,7 @@ import time
 import sys
 from requests.auth import HTTPBasicAuth
 import xml.dom.minidom
-import datetime
+from datetime import datetime
 from time import sleep
 from subprocess import Popen, PIPE
 
@@ -70,6 +70,7 @@ class SplunkVersionControlBackup:
     appName = "SplunkVersionControl"
     gitRepoURL = None
     stanzaName = None
+    lastRunEpoch = None
 
     # read XML configuration passed from splunkd
     def get_config(self):
@@ -303,8 +304,14 @@ class SplunkVersionControlBackup:
                                 #post request. In the case of an automatic lookup we want to send through the empty value...
                                 elif type=="automatic lookup" and theAttribute.text == None:
                                     info[attribName] = ""
+                    elif innerChild.tag.endswith("updated"):
+                        info["updated"] = innerChild.text
                 #If we have not set the keep flag to False
                 if keep:
+                    #Updated time was for our reference only, don't try to send that in while creating/updating the object
+                    updated = info["updated"]
+                    del info["updated"]
+                    
                     if nameOverride != "":
                         #keep a copy of the original name for use when checking if the object exists
                         info["origName"] = info["name"]
@@ -343,7 +350,11 @@ class SplunkVersionControlBackup:
                     else:
                         infoList[sharing].append(info)
                         logger.info("i=\"%s\" Recording name=\"%s\" info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
-        
+                    
+                    epochUpdatedTime = long(datetime.strptime(updated[0:19], "%Y-%m-%dT%H:%M:%S").strftime("%s"))
+                    if long(self.lastRunEpoch) <= epochUpdatedTime:
+                        logger.info("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, info["name"], type, app, info["owner"], updated))
+                    logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, info["name"], type, app, info["owner"], updated, epochUpdatedTime, self.lastRunEpoch))
                     creationSuccess.append(info["name"])
         
         #Find the storage directory for this app and create it if required
@@ -486,12 +497,23 @@ class SplunkVersionControlBackup:
                                     #Some attributes do not work with the REST API or should not be migrated...
                                     logger.debug("i=\"%s\" name=\"%s\" of type=macro key/value pair of %s=%s in app=%s" % (self.stanzaName, macroInfo["name"], attribName, theAttribute.text, app))
                                     macroInfo[attribName] = theAttribute.text
+                    elif innerChild.tag.endswith("updated"):
+                        macroInfo["updated"] = innerChild.text
                 if keep:
                     #Add this to the infoList
                     sharing = macroInfo["sharing"]
                     if not macros.has_key(sharing):
                         macros[sharing] = []
                     macros[sharing].append(macroInfo)
+                    
+                    #Updated time was for our reference only, don't try to send that in while creating/updating the object
+                    updated = macroInfo["updated"]
+                    del macroInfo["updated"]
+                    
+                    epochUpdatedTime = long(datetime.strptime(updated[0:19], "%Y-%m-%dT%H:%M:%S").strftime("%s"))
+                    if long(self.lastRunEpoch) <= epochUpdatedTime:
+                        logger.info("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, macroInfo["name"], app, owner, updated))
+                    logger.debug("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, macroInfo["name"], app, owner, updated, epochUpdatedTime, self.lastRunEpoch))
                     logger.info("i=\"%s\" Recording macro info for name=\"%s\" in app=%s with owner=%s sharing=%s" % (self.stanzaName, macroInfo["name"], app, macroInfo["owner"], macroInfo["sharing"]))
                     macroCreationSuccess.append(macroInfo["name"])
 
@@ -984,7 +1006,7 @@ class SplunkVersionControlBackup:
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=120)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1010,6 +1032,7 @@ class SplunkVersionControlBackup:
                 logging.warn("i=\"%s\" from file=%s no lines found!? Running against all apps now" % (self.stanzaName, versionControlFile))
             else:
                 lastRunEpoch = lastRunEpoch[0].strip()
+                self.lastRunEpoch = lastRunEpoch
                 appsWithChanges = {}
                 logger.info("i=\"%s\" %s reports a lastrun_epoch=%s using this date in report calls" % (self.stanzaName, versionControlFile, lastRunEpoch))
                 
@@ -1043,7 +1066,7 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
         
         #Always start from master and the current version (just in case changes occurred)
-        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=120)
+        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
         
@@ -1169,7 +1192,7 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" Completed working with app=%s" % (self.stanzaName, app))
 
         #Always start from master and the current version (just in case someone was messing around in the temp directory)
-        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=120)
+        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
         
@@ -1181,8 +1204,8 @@ class SplunkVersionControlBackup:
         (output, stderrout, res) = self.runOSProcess("cd %s; git status | grep \"nothing to commit\"" % (self.gitTempDir))
         if res == False:
             #We have one or more files to commit, do something
-            todaysDate = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
-            (output, stderrout, res) = self.runOSProcess("cd {0}; git add -A; git commit -am \"Updated by Splunk Version Control backup job {1}\"; git tag {2}; git push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate), timeout=120)
+            todaysDate = datetime.now().strftime("%Y-%m-%d_%H%M")
+            (output, stderrout, res) = self.runOSProcess("cd {0}; git add -A; git commit -am \"Updated by Splunk Version Control backup job {1}\"; git tag {2}; git push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate), timeout=300)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             
@@ -1205,7 +1228,7 @@ class SplunkVersionControlBackup:
         logger.info("i=\"%s\" Done" % (self.stanzaName))
     
     #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-    def runOSProcess(self, command, timeout=10):
+    def runOSProcess(self, command, timeout=30):
         logger.debug("i=\"%s\" Running command=\"%s\" with timeout=%s" % (self.stanzaName, command, timeout))
         p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
         for t in xrange(timeout):

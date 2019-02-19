@@ -893,7 +893,7 @@ class SplunkVersionControlRestore:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             #Clone the remote git repo
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=180)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -915,7 +915,7 @@ class SplunkVersionControlRestore:
             logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
             #Do a git pull to ensure we are up-to-date
-            (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=180)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1098,7 +1098,7 @@ class SplunkVersionControlRestore:
         logger.info("i=\"%s\" Done" % (self.stanzaName))
     
     #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-    def runOSProcess(self, command, timeout=10):
+    def runOSProcess(self, command, timeout=30):
         logger.debug("i=\"%s\" Running command=\"%s\" with timeout=%s" % (self.stanzaName, command, timeout))
         p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
         for t in xrange(timeout):
