@@ -11,7 +11,7 @@ import time
 import sys
 from requests.auth import HTTPBasicAuth
 import xml.dom.minidom
-from datetime import datetime
+from datetime import datetime,timedelta
 from time import sleep
 from subprocess import Popen, PIPE
 
@@ -151,6 +151,17 @@ class SplunkVersionControlBackup:
                         logger.debug("i=\"%s\" name=\"%s\" is the app added to the list" % (self.stanzaName, name))
         return appList
         
+    #As per https://stackoverflow.com/questions/1101508/how-to-parse-dates-with-0400-timezone-string-in-python/23122493#23122493
+    def determineTime(self, timestampStr):
+        logger.debug("i=\"%s\" attempting to convert %s to timestamp" % (self.stanzaName, timestampStr))
+        ret = datetime.strptime(timestampStr[0:19],  "%Y-%m-%dT%H:%M:%S")
+        if timestampStr[19]=='+':
+            ret-=timedelta(hours=int(timestampStr[20:22]),minutes=int(timestampStr[24:]))
+        elif timestampStr[19]=='-':
+            ret+=timedelta(hours=int(timestampStr[20:22]),minutes=int(timestampStr[24:]))
+        logger.debug("i=\"%s\" converted time is %s from %s" % (self.stanzaName, ret, timestampStr))
+        return ret
+
     ###########################
     #
     # runQueries (generic version)
@@ -351,7 +362,7 @@ class SplunkVersionControlBackup:
                         infoList[sharing].append(info)
                         logger.info("i=\"%s\" Recording name=\"%s\" info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     
-                    epochUpdatedTime = long(datetime.strptime(updated[0:19], "%Y-%m-%dT%H:%M:%S").strftime("%s"))
+                    epochUpdatedTime = long(self.determineTime(updated).strftime("%s"))
                     if long(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, info["name"], type, app, info["owner"], updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, info["name"], type, app, info["owner"], updated, epochUpdatedTime, self.lastRunEpoch))
@@ -510,7 +521,7 @@ class SplunkVersionControlBackup:
                     updated = macroInfo["updated"]
                     del macroInfo["updated"]
                     
-                    epochUpdatedTime = long(datetime.strptime(updated[0:19], "%Y-%m-%dT%H:%M:%S").strftime("%s"))
+                    epochUpdatedTime = long(self.determineTime(updated).strftime("%s"))
                     if long(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, macroInfo["name"], app, owner, updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, macroInfo["name"], app, owner, updated, epochUpdatedTime, self.lastRunEpoch))
