@@ -94,3 +94,23 @@ You could also run the input on a single search head cluster member but this is 
 
 ## SplunkBase Link
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
+
+## Release Notes 
+### 1.0.2
+Minor tweak to logging to ensure timezones are handled when logging updated objects
+
+### 1.0.1
+Minor changes to log when an object has an updated timestamp newer than the last epoch value (this logs objects that have a newer timestamp since last run)
+
+### 1.0.0
+Improvements to logging for git related errors and auto-wipe of the git repo on failure (this handles corruption of git repos on disk)
+
+### 0.0.7
+Change of app icons only, no functional changes
+
+### 0.0.6
+Added the sort_keys option into the python code, this should ensure the output files for git are in a consistent order (previously random). 
+
+The goal is to reduce the git repository size increase over time
+
+Added Troubleshooting section in details/README.md about "OPENSSL not found" issues on Ubuntu
