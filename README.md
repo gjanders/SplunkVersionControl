@@ -96,6 +96,11 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.3
+Fix so that the first run does not fail due to the lastRunEpoch been set to None
+
+Minor log improvement for when the saved searches do not work as expected
+
 ### 1.0.2
 Minor tweak to logging to ensure timezones are handled when logging updated objects
 
