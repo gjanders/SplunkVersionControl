@@ -363,7 +363,7 @@ class SplunkVersionControlBackup:
                         logger.info("i=\"%s\" Recording name=\"%s\" info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     
                     epochUpdatedTime = long(self.determineTime(updated).strftime("%s"))
-                    if long(self.lastRunEpoch) <= epochUpdatedTime:
+                    if self.lastRunEpoch == None or long(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, info["name"], type, app, info["owner"], updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, info["name"], type, app, info["owner"], updated, epochUpdatedTime, self.lastRunEpoch))
                     creationSuccess.append(info["name"])
@@ -1051,7 +1051,11 @@ class SplunkVersionControlBackup:
                 res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Directory\" updatedEpoch=%s" % (lastRunEpoch))
                 resList = res["results"]
                 if len(resList) > 0:
+                    logger.debug("i=\"%s\" Result list is %s" % (self.stanzaName, resList))
                     for aRes in resList:
+                        if not "app" in aRes or not "type" in aRes:
+                            logger.warn("i=\"%s\" This row of the results appears to not have an app/type, aRes=\"%s\"" % (self.stanzaName, aRes))
+                            continue
                         app = aRes["app"]
                         type = aRes["type"]
                         logger.debug("i=\"%s\" Found changes to app=%s of type=%s" % (self.stanzaName, app, type))
@@ -1064,7 +1068,11 @@ class SplunkVersionControlBackup:
                 res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Non-Directory\" updatedEpoch=%s" % (lastRunEpoch))
                 resList = res["results"]
                 if len(resList) > 0:
+                    logger.debug("i=\"%s\" Result list is %s" % (self.stanzaName, resList))
                     for aRes in resList:
+                        if not "app" in aRes or not "type" in aRes:
+                            logger.warn("i=\"%s\" This row of the results appears to not have an app/type, aRes=\"%s\"" % (self.stanzaName, aRes))
+                            continue
                         app = aRes["app"]
                         type = aRes["type"]
                         
