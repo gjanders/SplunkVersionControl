@@ -14,6 +14,7 @@ import xml.dom.minidom
 from datetime import datetime,timedelta
 from time import sleep
 from subprocess import Popen, PIPE
+import shutil
 
 ###########################
 #
@@ -67,6 +68,7 @@ class SplunkVersionControlBackup:
     includeOwner = None
     excludeOwner = None
     gitTempDir = None
+    gitRootDir = None
     appName = "SplunkVersionControl"
     gitRepoURL = None
     stanzaName = None
@@ -1004,6 +1006,7 @@ class SplunkVersionControlBackup:
         gitFailure = False
         
         self.gitTempDir = config['gitTempDir']
+        self.gitRootDir = config['gitTempDir']
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
             #include the subdirectory which is the git repo
@@ -1017,7 +1020,7 @@ class SplunkVersionControlBackup:
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=300)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1025,7 +1028,7 @@ class SplunkVersionControlBackup:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
             
-            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
         
@@ -1087,9 +1090,16 @@ class SplunkVersionControlBackup:
         #Always start from master and the current version (just in case changes occurred)
         (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
         if res == False:
-            logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
+            logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'. Wiping git directory" % (self.stanzaName, output, stderrout))
+            shutil.rmtree(self.gitTempDir)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
+            if res == False:
+                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                sys.exit(1)
+            else:
+                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
         
-        if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+        if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
             gitFailure = True
         
@@ -1213,9 +1223,16 @@ class SplunkVersionControlBackup:
         #Always start from master and the current version (just in case someone was messing around in the temp directory)
         (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
         if res == False:
-            logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'" % (self.stanzaName, output, stderrout))
+            logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, output, stderrout))
+            shutil.rmtree(self.gitTempDir)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
+            if res == False:
+                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                sys.exit(1)
+            else:
+                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
         
-        if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+        if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
             gitFailure = True
         
@@ -1228,7 +1245,7 @@ class SplunkVersionControlBackup:
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             
-            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
             #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"

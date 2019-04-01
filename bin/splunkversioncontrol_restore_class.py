@@ -65,6 +65,7 @@ class SplunkVersionControlRestore:
     destPassword = None
     session_key = None
     gitTempDir = None
+    gitRootDir = None
     appName = "SplunkVersionControl"
     gitRepoURL = None
     stanzaName = None
@@ -876,7 +877,8 @@ class SplunkVersionControlRestore:
         
         knownAppList = []
         self.gitTempDir = config['gitTempDir']
-        
+        self.gitRootDir = config['gitTempDir']
+         
         gitFailure = False
         
         dirExists = os.path.isdir(self.gitTempDir)
@@ -893,7 +895,7 @@ class SplunkVersionControlRestore:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             #Clone the remote git repo
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitTempDir, self.gitRepoURL), timeout=300)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -902,7 +904,7 @@ class SplunkVersionControlRestore:
                 logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
             
-            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1: 
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
         
@@ -917,12 +919,19 @@ class SplunkVersionControlRestore:
             #Do a git pull to ensure we are up-to-date
             (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
             if res == False:
-                logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
-                sys.exit(1)
+                logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                shutil.rmtree(self.gitTempDir)
+                (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
+                if res == False:
+                    logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                    sys.exit(1)
+                else:
+                    logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
+                    logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitRootDir))
             else:
-                logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+                logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitRootDir))
             
-            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
             
@@ -1028,7 +1037,7 @@ class SplunkVersionControlRestore:
                 else:
                     logger.info("i=\"%s\" Successfully ran the git checkout for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
                 
-                if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1:
+                if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1: 
                     logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                     gitFailure = True
                 

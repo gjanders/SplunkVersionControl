@@ -135,7 +135,7 @@ def print_error(s):
     print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
 
 #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-def runOSProcess(command, timeout=10):
+def runOSProcess(command, timeout=40):
     p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
     for t in xrange(timeout):
         sleep(1)
