@@ -96,6 +96,9 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.4
+Minor changes to the code to wipe the git directory re-clone on failure in both the clone failure & checkout master / git pull scenarios
+
 ### 1.0.3
 Fix so that the first run does not fail due to the lastRunEpoch been set to None
 
