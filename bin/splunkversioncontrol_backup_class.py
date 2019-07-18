@@ -524,7 +524,7 @@ class SplunkVersionControlBackup:
                     del macroInfo["updated"]
                     
                     epochUpdatedTime = long(self.determineTime(updated).strftime("%s"))
-                    if long(self.lastRunEpoch) <= epochUpdatedTime:
+                    if self.lastRunEpoch == None or long(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, macroInfo["name"], app, owner, updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, macroInfo["name"], app, owner, updated, epochUpdatedTime, self.lastRunEpoch))
                     logger.info("i=\"%s\" Recording macro info for name=\"%s\" in app=%s with owner=%s sharing=%s" % (self.stanzaName, macroInfo["name"], app, macroInfo["owner"], macroInfo["sharing"]))
