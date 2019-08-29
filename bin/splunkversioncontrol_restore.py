@@ -110,7 +110,7 @@ def print_error(s):
     print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
     
 #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-def runOSProcess(command, timeout=40):
+def runOSProcess(command, timeout=20):
     p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
     for t in xrange(timeout):
         sleep(1)
@@ -160,7 +160,7 @@ def validate_arguments():
         try:
             res = requests.get(url, auth=(destUsername, destPassword), verify=False)
             if (res.status_code != requests.codes.ok):
-                print_error("Attempt to validate access to Splunk failed with code %s, reason %s, text %s" % (res.status_code, res.reason, res.text))
+                print_error("Attempt to validate access to Splunk failed with code %s, reason %s, text %s on URL %s" % (res.status_code, res.reason, res.text, url))
                 sys.exit(1)
         except requests.exceptions.RequestException as e:
             print_error("Attempt to validate access to Splunk failed with error %s" % (e))

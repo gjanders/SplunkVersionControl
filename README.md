@@ -35,10 +35,15 @@ The restoration script then validates that the username entered in the lookup fi
 
 If a user attempts to restore the objects of another user, or attempts to restore the objects as a different user, this is allowed if the user has the admin role (which is determined by the saved search "SplunkVersionControl CheckAdmin").
 
+## Why use a lookup file and not trigger a remote command execution?
+Custom code or potentially a webhook could be used to trigger a remote Splunk instance to immediately restore rather than wait for the next scheduled modular input run.
+However I have not had time to write the additional code here, git pull requests are most welcome here!
+
 ## What is required for this application to work with a remote git repository?
 The following assumptions are made:
 - git is accessible on the command line, this has been tested on Linux only
 - git is using an SSH-based URL and the remote git repository allows the machine running the SplunkVersionControl application to remotely access the repository without a username/password prompt (i.e. SSH keys are in use)
+- git will work from the user running the Splunk process over SSH, note that on Windows this will be the system account by default, on Linux the splunk user
 
 ## Do the modular input backup and restore tasks need to be on the same Splunk instance?
 No. However, the backup/restore modular input must have access to its own git temporary directory on the OS filesystem.
@@ -62,7 +67,7 @@ For example if application search has had macros changed, then all macros in the
 ## How does the version control work?
 Each backup run that results in more than 0 file changes will auto-commit all changes into git and tag with the current date/time including the minute of the hour. This will create tags such as 2019-01-10_0136, these tags can later be used to "restore from" in the "SplunkVersionControl Restore" dashboard.
 
-The tags are recorded by outputting the tag list into the lookup definition splunkversioncontrol_taglist within the app, this same lookup definition is read by the dashboard to list available tags to restore from.
+The tags are recorded by outputting the tag list into the lookup definition `splunkversioncontrol_taglist` within the app, this same lookup definition is read by the dashboard to list available tags to restore from.
 
 ## How will the restore work?
 The restoration is based on a git tag, the relevant tag is checked out on the filesystem after running a git checkout master; git pull command.
@@ -70,23 +75,40 @@ The restoration is based on a git tag, the relevant tag is checked out on the fi
 Once checked out, the app/user/global directories are checked (depending on which scope was requested) to see if there is a relevant config item to restore, if found the remote object is either updated with the contents of git or created if it does not exist. By default the knowledge object is created with the same username that was in the backup, however there is an option on the SplunkVersionControl Restore dashboard to override the user on restoration, this is only able to be done by a user with an admin role.
 
 ## What other lookup files are used by the app?
-- splunkversioncontrol_lastrunepoch, this lookup definition records the last backup run for this particular Splunk instance
-- splunkversioncontrol_globalexclusionlist, this lookup definition records a list of excluded applications
-- splunkversioncontrol_restorelist, this lookup definition records what must be restored by the restore modular input
-- splunkversioncontrol_taglist, this lookup definition records the tags available in git
+- `splunkversioncontrol_lastrunepoch`, this lookup definition records the last backup run for this particular Splunk instance
+- `splunkversioncontrol_globalexclusionlist`, this lookup definition records a list of excluded applications
+- `splunkversioncontrol_restorelist`, this lookup definition records what must be restored by the restore modular input
+- `splunkversioncontrol_taglist`, this lookup definition records the tags available in git
 
 ## Where are the logs?
 On a Linux-based system
-/opt/splunk/var/log/splunk/splunkversioncontrol_restore.log
-/opt/splunk/var/log/splunk/splunkversioncontrol_backup.log
+`/opt/splunk/var/log/splunk/splunkversioncontrol_restore.log`
+`/opt/splunk/var/log/splunk/splunkversioncontrol_backup.log`
 
 Or the internal index which also has these log files
+
+## Installation guide
+- If running on a search head cluster or not running the modular inputs on the local instance, install the SplunkVersionControl app on the remote search head or search head cluster first
+- Create a new git repo and initialise the repo (it can have a README or can it be empty, but it must be at a point where the master branch exists)
+- The server doing the git backup must have SSH access to the repo without a username/password (in other words you need to have the SSH key setup so a git clone/git checkout/git push) all work without a prompt for credentials as the OS user running Splunk (as the modular input will run as this user)
+- If running on a standalone server the modular inputs can be configured either on the current standalone server, or another remote server, the app will work either way
+- If running on a search head cluster, the modular input must run on a standalone Splunk instance (non-clustered)
+- If errors are seen when creating the modular inputs see the troubleshooting below, or raise a question on SplunkAnswers for assistance
 
 ## Troubleshooting
 In some Linux OS distributions an error similar to `OPENSSL_1.0.0 not found` may appear, `os.unsetenv('LD_LIBRARY_PATH')` appears to fix this however AppInspect does not allow modification of OS environment variables.
 
 If you have this issue please add this into the python files to workaround the problem as required
 Refer to [this issue on github](https://github.com/gjanders/SplunkVersionControl/issues/3) for more details
+
+### Problems with the Splunk Version Control Restore or Splunk Version Control Backup modular input
+Both inputs follow a similar validation process:
+- Run a request against `<srcURL>/servicesNS/nobody/<remoteAppName>/search/jobs/export?search=makeresults` (where remoteAppName is SplunkVersionControl unless specified)
+- Run the OS command (as the user running splunk) `git ls-remote <gitRepoURL>`
+- If the above fails attempt to run `ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no <gitRepoURL>`
+- If the previous step was required re-attempt the git ls-remote step again
+
+In 7.3.0 the Splunk process will kill -9 the modular input if it takes more than 30 seconds, if this occurs you can bypass validation by updating the inputs.conf file manually
 
 ## Will this work on a search head cluster?
 No, modular inputs run on each member at the same time which would not work well...however you can use a standalone server to backup/restore to a search head cluster.
@@ -96,6 +118,10 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.6
+Dashboard backups no longer include version attribute (appears on some dashboards and prevents restoration)
+Updated README.md to include an installation and troubleshooting guide
+
 ### 1.0.5
 Correct lastRunEpoch (as per fix in 1.0.3) for macros
 
