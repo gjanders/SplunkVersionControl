@@ -13,7 +13,8 @@ from splunklib.binding import HTTPError
 @Configuration(type='reporting')
 class SVCPostRestore(GeneratingCommand):
 
-    url = Option(require=False)
+    url = Option(require=True)
+    splunk_vc_name = Option(require=True)
 
     def generate(self):
         """
@@ -24,17 +25,14 @@ class SVCPostRestore(GeneratingCommand):
             then app context
             If the owner is specified look under the particular owner context, only someone with admin access can use this option
         """
-        if self.url:
-            urlregex = re.compile("^(?:https:\/\/)[\w0-9_\.-]+:8089/services/splunkversioncontrol_rest_restore$")
-            if urlregex.match(self.url):
-                url = self.url
-            else:
-                yield {'result': 'Invalid URL passed in, url= must begin with https:// and would normally end in :8089/services/splunkversioncontrol_rest_restore, url provided %s' % (self.url) }
-                return
+        urlregex = re.compile("^(?:https:\/\/)[\w0-9_\.-]+:8089/services/splunkversioncontrol_rest_restore$")
+        if urlregex.match(self.url):
+            url = self.url
         else:
-            url = "https://localhost:8089/services/splunkversioncontrol_rest_restore"
+            yield {'result': 'Invalid URL passed in, url= must begin with https:// and would normally end in :8089/services/splunkversioncontrol_rest_restore, url provided %s' % (self.url) }
+            return
 
-        body = { 'Authorization': 'Splunk ' + self._metadata.searchinfo.session_key }
+        body = { 'Authorization': 'Splunk ' + self._metadata.searchinfo.session_key, 'splunk_vc_name': self.splunk_vc_name }
         attempt = requests.post(url, verify=False, data=body)
         if attempt.status_code != 200:
             yield {'result': 'Unknown failure, received a non-200 response code of %s on the URL %s, text result is %s' % (attempt.status_code, url, attempt.text)}         
