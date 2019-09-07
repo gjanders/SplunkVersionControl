@@ -16,13 +16,13 @@ from time import sleep
 from subprocess import Popen, PIPE
 import shutil
 
-###########################
-#
-# Store Knowledge Objects
-#   Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
-#   to restore the knowledge object if it was deleted/changed to the filesystem
-# 
-###########################
+"""
+ 
+ Store Knowledge Objects
+   Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
+   to restore the knowledge object if it was deleted/changed to the filesystem
+ 
+"""
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging

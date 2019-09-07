@@ -9,13 +9,13 @@ from splunkversioncontrol_backup_class import SplunkVersionControlBackup
 from subprocess import Popen, PIPE
 from time import sleep
 
-###########################
-#
-# Store Knowledge Objects
-#   Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
-#   to restore the knowledge object if it was deleted/changed to the filesystem
-# 
-###########################
+"""
+
+ Store Knowledge Objects
+   Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
+   to restore the knowledge object if it was deleted/changed to the filesystem
+ 
+"""
 
 #Define the XML scheme for the inputs page
 SCHEME = """<scheme>

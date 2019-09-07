@@ -9,15 +9,15 @@ from splunkversioncontrol_restore_class import SplunkVersionControlRestore
 from subprocess import Popen, PIPE
 from time import sleep
 
-###########################
-#
-# Restore Knowledge Objects
-#   Query a remote lookup file to determine what items should be restored from git into a Splunk instance
-#   In general this will be running against the localhost unless it is been tested as the lookup file will be updated
-#   by a user accessible dashboard
-#   Basic validation will be done to ensure someone without the required access cannot restore someone else's knowledge objects
-# 
-###########################
+"""
+
+ Restore Knowledge Objects
+   Query a remote lookup file to determine what items should be restored from git into a Splunk instance
+   In general this will be running against the localhost unless it is been tested as the lookup file will be updated
+   by a user accessible dashboard
+   Basic validation will be done to ensure someone without the required access cannot restore someone else's knowledge objects
+ 
+"""
 
 #Define the scheme for the inputs page to use
 SCHEME = """<scheme>
