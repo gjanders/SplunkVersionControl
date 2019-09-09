@@ -107,6 +107,7 @@ def get_validation_data():
 # prints XML error data to be consumed by Splunk
 def print_error(s):
     print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
+    logger.error(s)
     
 #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
 #    logger.warn("OS timeout after %s seconds while running %s" % (timeout, command))

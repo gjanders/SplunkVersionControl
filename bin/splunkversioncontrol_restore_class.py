@@ -844,7 +844,7 @@ class SplunkVersionControlRestore:
     ##########################
     #restlist_override is when we are passed a dictionary with info on the restore requirements rather than obtaining this via a lookup commmand
     #config_override is for when we are passed a configuration dictionary and we do not need to read our config from stdin (i.e. we were not called by Splunk in the normal fashion)
-    def run_script(self, resList_override=None, config_override=None):
+    def run_script(self, restlist_override=None, config_override=None):
         if not config_override:
             config = self.get_config()
         else:
@@ -906,12 +906,12 @@ class SplunkVersionControlRestore:
                 #make the directory and clone under here
                 os.mkdir(self.gitTempDir)
             #Initially we must trust our remote repo URL
-            (output, stderrout, res) = self.runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
+            (output, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             #Clone the remote git repo
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
+            (output, stderrout, res) = runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -936,11 +936,11 @@ class SplunkVersionControlRestore:
             logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
             #Do a git pull to ensure we are up-to-date
-            (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), logger, timeout=300)
+            (output, stderrout, res) = runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), logger, timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 shutil.rmtree(self.gitTempDir)
-                (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
+                (output, stderrout, res) = runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
                 if res == False:
                     logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                     sys.exit(1)
@@ -1052,7 +1052,7 @@ class SplunkVersionControlRestore:
                     continue
                 
                 #Do a git pull to ensure we are up-to-date
-                (output, stderrout, res) = self.runOSProcess("cd %s; git checkout %s" % (self.gitTempDir, tag), logger)
+                (output, stderrout, res) = runOSProcess("cd %s; git checkout %s" % (self.gitTempDir, tag), logger)
                 if res == False:
                     logger.error("i=\"%s\" user=%s, object name=%s, type=%s, time=%s, git checkout of tag=%s failed in directory dir=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, user, name, type, time, tag, self.gitTempDir, output, stderrout))
                 else:
