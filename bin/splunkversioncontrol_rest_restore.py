@@ -107,7 +107,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         
         #Look under the entry/content section for the relevant information we require, mainly destURL, useLocalAuth and potentially destUsername/destPassword
         json_dict = json.loads(res.text)['entry'][0]['content']
-        self.response.write(str(json_dict) + "\n\n\n")
+        #self.response.write(str(json_dict) + "\n\n\n")
         
         useLocalAuth = False
         if 'useLocalAuth' in json_dict:
@@ -137,7 +137,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         else:
             auth = HTTPBasicAuth(destUsername, destPassword)
 
-        if 'remoteAppName' in json_dict:
+        if 'remoteAppName' in json_dict and json_dict['remoteAppName']!="":
             remoteAppName = json_dict['remoteAppName']
         else:
             remoteAppName = "SplunkVersionControl"
@@ -156,9 +156,13 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         #At this point we run a POST request to check the audit logs and ensure the user is allowed to run a restore....
         #TODO make this a POST request on the correct URL endpoint for the app?
         json_res = self.runSearchJob(destURL, remoteAppName, headers, auth, username, starttime-60)
+
+        if 'error' in json_res:
+            self.response.write("An error occurred: %s" % (json_res['error']))
+            return
         if len(json_res['results']) == 0:
             logger.warn("No matching results for audit query using username=%s, remoteAppName=%s on url=%s" % (username, remoteAppName, destURL))
-            self.response.write("No matching results")
+            self.response.write("No matching results for audit query using username=%s, remoteAppName=%s on url=%s" % (username, remoteAppName, destURL))
             return
         else:
             #we are at the point where we checked the remote instance and confirmed the user in question was allowed to request a restore, pass control
@@ -186,7 +190,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         res = requests.post(url, auth=auth, headers=headers, verify=False, data=data)
         if (res.status_code != requests.codes.ok):
             logger.error("url=%s status_code=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text))
-            return False
+            return { "error": "url=%s status_code=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text) } 
         res = json.loads(res.text)
         
         #Log return messages from Splunk, often these advise of an issue but not always...

@@ -12,9 +12,8 @@ import sys
 from requests.auth import HTTPBasicAuth
 import xml.dom.minidom
 from datetime import datetime,timedelta
-from time import sleep
-from subprocess import Popen, PIPE
 import shutil
+from splunkversioncontrol_utility import runOSProcess
 
 """
  
@@ -1016,11 +1015,11 @@ class SplunkVersionControlBackup:
                 #make the directory and clone under here
                 os.mkdir(self.gitTempDir)
             #Initially we must trust our remote repo URL
-            (output, stderrout, res) = self.runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")])
+            (output, stderrout, res) = self.runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1088,11 +1087,11 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
         
         #Always start from master and the current version (just in case changes occurred)
-        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
+        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), logger, timeout=300)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'. Wiping git directory" % (self.stanzaName, output, stderrout))
             shutil.rmtree(self.gitTempDir)
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1221,11 +1220,11 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" Completed working with app=%s" % (self.stanzaName, app))
 
         #Always start from master and the current version (just in case someone was messing around in the temp directory)
-        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), timeout=300)
+        (output, stderrout, res) = self.runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), logger, timeout=300)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, output, stderrout))
             shutil.rmtree(self.gitTempDir)
-            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), timeout=300)
+            (output, stderrout, res) = self.runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1237,11 +1236,11 @@ class SplunkVersionControlBackup:
             gitFailure = True
         
         #At this point we've written out the potential updates
-        (output, stderrout, res) = self.runOSProcess("cd %s; git status | grep \"nothing to commit\"" % (self.gitTempDir))
+        (output, stderrout, res) = self.runOSProcess("cd %s; git status | grep \"nothing to commit\"" % (self.gitTempDir), logger)
         if res == False:
             #We have one or more files to commit, do something
             todaysDate = datetime.now().strftime("%Y-%m-%d_%H%M")
-            (output, stderrout, res) = self.runOSProcess("cd {0}; git add -A; git commit -am \"Updated by Splunk Version Control backup job {1}\"; git tag {2}; git push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate), timeout=300)
+            (output, stderrout, res) = self.runOSProcess("cd {0}; git add -A; git commit -am \"Updated by Splunk Version Control backup job {1}\"; git tag {2}; git push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate), logger, timeout=300)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             
@@ -1262,20 +1261,3 @@ class SplunkVersionControlBackup:
             shutil.rmtree(self.gitTempDir)
         
         logger.info("i=\"%s\" Done" % (self.stanzaName))
-    
-    #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-    def runOSProcess(self, command, timeout=30):
-        logger.debug("i=\"%s\" Running command=\"%s\" with timeout=%s" % (self.stanzaName, command, timeout))
-        p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
-        for t in xrange(timeout):
-            sleep(1)
-            if p.poll() is not None:
-                #return p.communicate()
-                (stdoutdata, stderrdata) = p.communicate()
-                logger.debug("command=\"%s\", output=\"%s\", stderrout=\"%s\"" % (command, stdoutdata, stderrdata))
-                if p.returncode != 0:
-                    return stdoutdata, stderrdata, False
-                else:
-                    return stdoutdata, stderrdata, True
-        p.kill()
-        return "", "timeout after %s seconds" % (timeout), False
