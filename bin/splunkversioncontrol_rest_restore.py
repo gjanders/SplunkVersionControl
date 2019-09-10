@@ -153,9 +153,15 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             restoreAsUser = payload['restoreAsUser'][0]
         scope = payload['scope'][0]
         
+        #We need a little bit of time to index the _audit event that literally just happened
+        #a 30 second delay is annoying but it appears to work...hardcoding this for now
+        logger.info("Sleeping for 30 seconds to wait for audit logs")
+        time.sleep(30)
+        logger.info("Sleep completed")
         #At this point we run a POST request to check the audit logs and ensure the user is allowed to run a restore....
         #TODO make this a POST request on the correct URL endpoint for the app?
         starttime = starttime-60
+        #FIXME
         json_res = self.runSearchJob(destURL, remoteAppName, headers, auth, username, starttime)
 
         if 'error' in json_res:
