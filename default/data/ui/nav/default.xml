@@ -1,5 +1,5 @@
 <nav search_view="search">
-  <view name="splunkversioncontrol_restore" default="true" />
+  <view name="splunkversioncontrol_restore_dynamic" default="true" />
   <view name="search" default='true' />
   <view name="datasets" />
   <view name="reports" />
