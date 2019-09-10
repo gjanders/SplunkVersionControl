@@ -155,20 +155,21 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         
         #At this point we run a POST request to check the audit logs and ensure the user is allowed to run a restore....
         #TODO make this a POST request on the correct URL endpoint for the app?
-        json_res = self.runSearchJob(destURL, remoteAppName, headers, auth, username, starttime-60)
+        starttime = starttime-60
+        json_res = self.runSearchJob(destURL, remoteAppName, headers, auth, username, starttime)
 
         if 'error' in json_res:
             self.response.write("An error occurred: %s" % (json_res['error']))
             return
         if len(json_res['results']) == 0:
-            logger.warn("No matching results for audit query using username=%s, remoteAppName=%s on url=%s" % (username, remoteAppName, destURL))
-            self.response.write("No matching results for audit query using username=%s, remoteAppName=%s on url=%s" % (username, remoteAppName, destURL))
+            logger.warn("No matching results for audit query using username=%s, remoteAppName=%s on url=%s with starttime of %s" % (username, remoteAppName, destURL, starttime))
+            self.response.write("No matching results for audit query using username=%s, remoteAppName=%s on url=%s with starttime of %s" % (username, remoteAppName, destURL, starttime))
             return
         else:
             #we are at the point where we checked the remote instance and confirmed the user in question was allowed to request a restore, pass control
             #to the restore class to attempt the actual restore
             svc_restore_obj = SplunkVersionControlRestore()
-            resList = { 'app' : app, 'type': type, 'name': obj_name, 'tag': tag, 'scope': scope, 'time': starttime, 'restoreAsUser': restoreAsUser, 'user': username }
+            resList = [{ 'app' : app, 'type': type, 'name': obj_name, 'tag': tag, 'scope': scope, 'time': starttime, 'restoreAsUser': restoreAsUser, 'user': username }]
             #Name is required as part of the config dictionary, session_key is used if useLocalAuth is true in the config
             json_dict['name'] = "splunkversioncontrol_restore://" + splunk_vc_name
             json_dict['session_key'] = self.request['systemAuth']
