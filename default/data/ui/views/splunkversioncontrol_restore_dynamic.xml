@@ -1,0 +1,143 @@
+<form>
+  <label>SplunkVersionControl Restore Dynamic</label>
+  <description>Use this page to request the restoration of a Splunk knowledge object, note that once restored the previous knowledge object is overwritten so use this restoration page with caution. Note the "Restore As User?" is for Splunk Admin use only</description>
+  <fieldset submitButton="true">
+    <input type="dropdown" token="app">
+      <label>Splunk Application Name</label>
+      <fieldForLabel>app</fieldForLabel>
+      <fieldForValue>app</fieldForValue>
+      <search>
+        <query>| rest /services/apps/local search="disabled=0" count=0 f=title splunk_server=local
+| rename title as app
+| search NOT [ | inputlookup splunkversioncontrol_globalexclusionlist ]
+| table app</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="type">
+      <label>Object Type</label>
+      <choice value="dashboard">dashboard</choice>
+      <choice value="savedsearch">savedsearch (Reports/Alerts)</choice>
+      <choice value="macro">macros</choice>
+      <choice value="fieldalias">fieldalias</choice>
+      <choice value="fieldextraction">fieldextraction</choice>
+      <choice value="fieldtransformation">fieldtransform</choice>
+      <choice value="navmenu">navmenu</choice>
+      <choice value="datamodel">datamodel</choice>
+      <choice value="panels">prebuilt panels</choice>
+      <choice value="calcfields">calcfields</choice>
+      <choice value="workflowaction">workflowaction</choice>
+      <choice value="sourcetyperenaming">sourcetypeRename</choice>
+      <choice value="tags">tags</choice>
+      <choice value="eventtypes">eventtypes</choice>
+      <choice value="lookupdef">lookup (definition only)</choice>
+      <choice value="automaticlookup">automaticLookup</choice>
+      <choice value="collection">collection (kvstore)</choice>
+      <choice value="viewstate">viewstate</choice>
+      <choice value="times">times</choice>
+    </input>
+    <input type="text" token="name">
+      <label>Object URI/Name (not label)</label>
+    </input>
+    <input type="dropdown" token="tag">
+      <label>Restore date/time</label>
+      <fieldForLabel>tag</fieldForLabel>
+      <fieldForValue>tag</fieldForValue>
+      <search>
+        <query>| inputlookup splunkversioncontrol_taglist | sort - tag</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="text" token="restoreAsUser">
+      <label>Restore As User?</label>
+      <default>""</default>
+      <initialValue>""</initialValue>
+    </input>
+    <input type="dropdown" token="scope">
+      <label>Scope/Sharing</label>
+      <choice value="all">All</choice>
+      <choice value="user">Private (user level sharing)</choice>
+      <choice value="app">App (or global/everyone) sharing</choice>
+      <default>all</default>
+      <initialValue>all</initialValue>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <html>
+      <!-- Button trigger-->
+      <a href="#" id="btn1" class="btnModalInfo" data-toggle="modal" data-target="#desc1">
+        <!-- Text for the button -->
+        <span class="icon-large icon-info-circle" aria-hidden="true"/> <b>Click for dashboard information</b>
+      </a>
+ <div class="modal fade" id="desc1" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
+      <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header" style="padding-top: 2px; padding-bottom: 2px">
+        <!-- Header of pop up -->
+        <row>
+          <div>
+            <h2 class="modal-title text-center" id="myModalLabel">
+              
+              <!-- Header text -->
+              <!--====== DASHBOARD NAME ======= -->
+                  SplunkVersionControl Restore Usage
+            </h2>
+          </div>
+        </row>
+      </div>
+      <div class="modal-body" style="overflow:auto">
+        
+        <h1>
+          
+          <b>Description</b>
+        </h1>
+        
+        <!--====== DASHBOARD FULL DESCRIPTION ======= -->
+        This dashboard allows an individual to request the restoration of a Splunk knowledge object that has previously been backed up to a git repository
+
+        <hr/>
+                <h1>
+          
+          <b>Usage</b>
+          
+          
+          
+        </h1>
+        <h2>Application Name</h2>Splunk Application Name where the object is located<br/>
+        <h2>Object Type</h2>The Splunk knowledge object type, such as dashboard, savedsearch et cetera<br/>
+        <h2>Object URI/Name</h2>The dashboard URI (in this current case splunkversioncontrol_restore) or the name of the savedsearch et cetera, note this field is case sensitive<br/>
+        <h2>Restore date/time</h2>The date/time of the git tag that should be used to restore the object, choose the closest date/time to which you know the object either existed or was in a working state<br/>
+        <h2>Restore as user?</h2>This field is for Splunk admin use only. If you are restoring an object and it needs to be owned by another user, use this field to enter the username (useful for when the object owner no longer exists in Splunk)<br/>
+        <h2>Scope/Sharing</h2>Did the object have application level/global sharing or user level (private) sharing? If All is selected the restoration will run against both user level and app/global level. <br/>Note that you can have an object, such as a dashboard with the same name at the user/private sharing level and the app sharing level within the same Splunk application which is why this field exists<br/>        
+    </div>
+      <div class="modal-footer">
+        
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+      </div>
+      </div>
+      </div>
+    </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>This output displays the results from running the restoration request (note this will take a while to run)</title>
+      <table>
+        <title>SplunkVersionControl Results (please wait a few minutes for results)</title>
+        <search>
+          <query>| postversioncontrolrestore app="$app$" obj_name="$name$" restoreAsUser="$restoreAsUser$" scope="$scope$" splunk_vc_name=`splunk_vc_name` tag="$tag$" url=`splunk_vc_url` type="$type$" timeout=`splunk_vc_timeout`</query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>

@@ -9,7 +9,7 @@ Splunk (as of the time of writing in January 2019) has no native ability to use 
 
 ## How does the app function?
 
-The app uses two modular inputs to back up and restore configurations, Splunk Version Control Backup (or splunkversioncontrol_backup) and and Splunk Version Control Restore (or splunkversioncontrol_restore). 
+The app uses two modular inputs to back up and restore configurations, Splunk Version Control Backup (or `splunkversioncontrol_backup`) and and Splunk Version Control Restore (or `splunkversioncontrol_restore`). 
 
 The backup portion of the app provides a Splunk modular input with the ability to serialize various Splunk knowledge objects into JSON format, which is then stored in a remote git repository and tagged based on each change to the backup.
 
@@ -21,7 +21,19 @@ The restore portion provides a Splunk modular input and a dashboard (SplunkVersi
 
 Use the SplunkVersionControl Restore dashboard to request that a knowledge object be restored to a prior version. You must be the author of the knowledge objects you wish to restore, or have the admin role. The application with the knowledge object in it must still exist on the Splunk server.
 
+There are two unique dashboards with two different restoration methods, the original version is described below:
 When a knowledge object restore is requested the dashboard (SplunkVersionControl Restore) outputs the knowledge object information to a lookup with the definition splunkversioncontrol_restorelist. The modular input then triggers the restore based on the contents of this lookup, the modular input either creates or updates the knowledge object with the requested git tag, or logs the failure to find the object in the logs.
+
+The newer dynamic version follows a similar process, but instead of adding the knowledge object restore information to a lookup file it runs a Splunk custom command `postversioncontrolrestore` that hits a REST endpoint on either a local or a remote server.
+The REST endpoint then performs a few functions:
+- Queries the source system and passes in the authentication token of the current user, this includes restore information and the `splunkversioncontrol_restore` input stanza name
+- The remote system then sends a query back to the source ip it received the request from, using the token to check the username logged in 
+- The remote system then looks up the login information for the relevant `splunkversioncontrol_restore` input stanza and runs a remote query against it
+- The said remote query runs a saved search named `Splunk Version Control Audit Query POST`
+- To prevent issues just before running the above query there is a sleep period involved (configurable via the `splunk_vc_timeout` macro)
+- If the report confirms the relevant user did indeed request a restore of some kind, the restore continues
+- The restore now followed the previous process from this point triggering a restore process
+- If multiple users attempt to run the restore at the same time, one of them will receive an error to advise a restore is in progress and to try again later  
 
 ## Security Concerns
 The ability to restore/create configuration opens up a few obvious issues:
@@ -33,11 +45,14 @@ To address these issues, a report named "SplunkVersionControl Audit Query" runs 
 
 The restoration script then validates that the username entered in the lookup file and the time match those found in the audit log. If they do not match then the restoration is rejected.
 
+If you are using the dynamic version of the restore dashboard (custom command `postversioncontrolrestore`, an alternative report named "Splunk Version Control Audit Query POST" runs to check the audit logs, this report determines if the restoration request was made by the user in question. The report returns 0 or more results and if it returns results for the particular user, the restore proceeds.
+
+Due to the above there is the possiblity that multiple users may trigger a restore while a restore is in progress, a kvstore is used to prevent this from occurring and an additional restore attempt when the restore process is in progress results in an error message to try again.
+
 If a user attempts to restore the objects of another user, or attempts to restore the objects as a different user, this is allowed if the user has the admin role (which is determined by the saved search "SplunkVersionControl CheckAdmin").
 
 ## Why use a lookup file and not trigger a remote command execution?
-Custom code or potentially a webhook could be used to trigger a remote Splunk instance to immediately restore rather than wait for the next scheduled modular input run.
-However I have not had time to write the additional code here, git pull requests are most welcome here!
+A custom command named postversioncontrolrestore and the accompanying dashboard `splunkversioncontrolrestore_dynamic` were created for this purpose in version 1.0.7
 
 ## What is required for this application to work with a remote git repository?
 The following assumptions are made:
@@ -75,15 +90,16 @@ The restoration is based on a git tag, the relevant tag is checked out on the fi
 Once checked out, the app/user/global directories are checked (depending on which scope was requested) to see if there is a relevant config item to restore, if found the remote object is either updated with the contents of git or created if it does not exist. By default the knowledge object is created with the same username that was in the backup, however there is an option on the SplunkVersionControl Restore dashboard to override the user on restoration, this is only able to be done by a user with an admin role.
 
 ## What other lookup files are used by the app?
-- `splunkversioncontrol_lastrunepoch`, this lookup definition records the last backup run for this particular Splunk instance
 - `splunkversioncontrol_globalexclusionlist`, this lookup definition records a list of excluded applications
 - `splunkversioncontrol_restorelist`, this lookup definition records what must be restored by the restore modular input
 - `splunkversioncontrol_taglist`, this lookup definition records the tags available in git
 
 ## Where are the logs?
 On a Linux-based system
-`/opt/splunk/var/log/splunk/splunkversioncontrol_restore.log`
-`/opt/splunk/var/log/splunk/splunkversioncontrol_backup.log`
+- `/opt/splunk/var/log/splunk/splunkversioncontrol_restore.log` -- this log will contain information about the splunk restore modular input
+- `/opt/splunk/var/log/splunk/splunkversioncontrol_backup.log` -- this log will contain information about the splunk backup modular input
+- `/opt/splunk/var/log/splunk/splunkversioncontrol_postversioncontrolrestore.log` -- this log contains information about the | postversioncontrol command
+- `/opt/splunk/var/log/splunk/splunkversioncontrol_rest_restore.log` -- log log contains information about hits to the REST endpoint `/services/splunkversioncontrol_rest_restore`
 
 Or the internal index which also has these log files
 
@@ -94,6 +110,13 @@ Or the internal index which also has these log files
 - If running on a standalone server the modular inputs can be configured either on the current standalone server, or another remote server, the app will work either way
 - If running on a search head cluster, the modular input must run on a standalone Splunk instance (non-clustered)
 - If errors are seen when creating the modular inputs see the troubleshooting below, or raise a question on SplunkAnswers for assistance
+- If you are running the newer `splunkversioncontrol_restore_dynamic` dashboard the macros `splunk_vc_name`, `splunk_vc_url`, `splunk_vc_timeout` may need customisation to match your environment 
+
+## Macros
+The following macros exist and are relate to the `splunkversioncontrol_restore_dynamic` dashboard
+- `splunk_vc_name` - this macro is the name of the `splunkversioncontrol_restore` modular input name on the remote (or local) system where the restore occurs
+- `splunk_vc_url` - this macro is the URL endpoint of the remote system, defaults to `https://localhost:8089/services/splunkversioncontrol_rest_restore` 
+- `splunk_vc_timeout` - this is the time delay between triggering the remote command and waiting for the `_audit` index to catchup with a log entry to advise the command was run, if set too short the restore may fail because the `| postversioncontrolrestore` search has not appeared in the `_audit` index yet
 
 ## Troubleshooting
 In some Linux OS distributions an error similar to `OPENSSL_1.0.0 not found` may appear, `os.unsetenv('LD_LIBRARY_PATH')` appears to fix this however AppInspect does not allow modification of OS environment variables.
@@ -118,6 +141,21 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.7
+This version has a few major changes:
+- Restoration immediately after clicking the restore button rather than using lookup files
+- The previous lookup file method remains supported (in fact the `splunkversioncontrol_restore` modular input must still exist, it is not required to run on a schedule
+- Changes to the way the OS processes are executed in python which makes it more reliable during validation of the modular inputs
+- Improved logging, in particular relating to the validation procedure
+
+The new dashboard `splunkversioncontrol_restore_dynamic` which is now the default dashboard is an alternative to the `splunkversioncontrol_restore` dashboard which remains lookup based (the latter dashboard assumes the `splunkversioncontrol_restore` modular input is running on a schedule
+
+Note that if you are running this app on a search head cluster, and restoring from a different server you may wish to remove the:
+- `web.conf`
+- `restmap.conf`
+
+Files from the default directory, this removes the ability to trigger a restore by hitting a REST endpoint without authentication
+
 ### 1.0.6
 Dashboard backups no longer include version attribute (appears on some dashboards and prevents restoration)
 Updated README.md to include an installation and troubleshooting guide
@@ -146,7 +184,7 @@ Improvements to logging for git related errors and auto-wipe of the git repo on 
 Change of app icons only, no functional changes
 
 ### 0.0.6
-Added the sort_keys option into the python code, this should ensure the output files for git are in a consistent order (previously random). 
+Added the `sort_keys` option into the python code, this should ensure the output files for git are in a consistent order (previously random). 
 
 The goal is to reduce the git repository size increase over time
 

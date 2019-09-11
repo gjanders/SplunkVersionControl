@@ -6,18 +6,17 @@ import os
 import sys
 import xml.dom.minidom, xml.sax.saxutils
 from splunkversioncontrol_restore_class import SplunkVersionControlRestore
-from subprocess import Popen, PIPE
-from time import sleep
+from splunkversioncontrol_utility import runOSProcess
 
-###########################
-#
-# Restore Knowledge Objects
-#   Query a remote lookup file to determine what items should be restored from git into a Splunk instance
-#   In general this will be running against the localhost unless it is been tested as the lookup file will be updated
-#   by a user accessible dashboard
-#   Basic validation will be done to ensure someone without the required access cannot restore someone else's knowledge objects
-# 
-###########################
+"""
+
+ Restore Knowledge Objects
+   Query a remote lookup file to determine what items should be restored from git into a Splunk instance
+   In general this will be running against the localhost unless it is been tested as the lookup file will be updated
+   by a user accessible dashboard
+   Basic validation will be done to ensure someone without the required access cannot restore someone else's knowledge objects
+ 
+"""
 
 #Define the scheme for the inputs page to use
 SCHEME = """<scheme>
@@ -71,6 +70,11 @@ SCHEME = """<scheme>
                 <description>defaults to SplunkVersionControl, this app needs to contain the savedsearches and potentially the splunkversioncontrol_globalexclusionlist</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="timewait">
+                <title>timewait</title>
+                <description>defaults to 600, if the kvstore contains an entry advising there is a restore running, how many seconds should pass before the entry is deleted and the restore happens anyway?</description>
+                <required_on_create>false</required_on_create>
+            </arg>
         </args>
     </endpoint>
 </scheme>
@@ -108,22 +112,8 @@ def get_validation_data():
 # prints XML error data to be consumed by Splunk
 def print_error(s):
     print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
+    logger.error(s)
     
-#Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-def runOSProcess(command, timeout=20):
-    p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
-    for t in xrange(timeout):
-        sleep(1)
-        if p.poll() is not None:
-            #return p.communicate()
-            (stdoutdata, stderrdata) = p.communicate()
-            if p.returncode != 0:
-                return stdoutdata, stderrdata, False
-            else:
-                return stdoutdata, stderrdata, True
-    p.kill()
-    return "", "timeout after %s seconds" % (timeout), False
-
 #Validate the arguments to the app to ensure this will work...
 def validate_arguments():
     val_data = get_validation_data()
@@ -150,29 +140,37 @@ def validate_arguments():
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
     
+    if 'timewait' in val_data:
+        try:
+            int(val_data['timewait'])
+        except ValueError:
+            print_error("Unable to convert timewait field to a valid value, this must be an integer value in seconds, value provided was %s" % (val_data['timewait']))
+            sys.exit(1)
+    
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:
         url = val_data['destURL'] + "/servicesNS/nobody/%s/search/jobs/export?search=makeresults" % (appName)
         #Verify=false is hardcoded to workaround local SSL issues
         destUsername = val_data['destUsername']
         destPassword = val_data['destPassword']
-        
         try:
+            logger.debug("Running query against URL %s with username %s" % (url, destUsername))
             res = requests.get(url, auth=(destUsername, destPassword), verify=False)
+            logger.debug("End query against URL %s with username %s" % (url, destUsername))
             if (res.status_code != requests.codes.ok):
                 print_error("Attempt to validate access to Splunk failed with code %s, reason %s, text %s on URL %s" % (res.status_code, res.reason, res.text, url))
                 sys.exit(1)
         except requests.exceptions.RequestException as e:
             print_error("Attempt to validate access to Splunk failed with error %s" % (e))
             sys.exit(1)
-
+        logger.warn("done")
     gitRepoURL = val_data['gitRepoURL']
-    (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ])
-    
+
+    (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ], logger)
     #If we didn't manage to ls-remote perhaps we just need to trust the fingerprint / this is the first run?
     if res == False:
-        (stdout, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")])
-        (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ])
+        (stdout, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
+        (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ], logger)
     
     if res == False:
         print_error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))

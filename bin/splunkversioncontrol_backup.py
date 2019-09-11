@@ -6,16 +6,15 @@ import os
 import sys
 import xml.dom.minidom, xml.sax.saxutils
 from splunkversioncontrol_backup_class import SplunkVersionControlBackup
-from subprocess import Popen, PIPE
-from time import sleep
+from splunkversioncontrol_utility import runOSProcess
 
-###########################
-#
-# Store Knowledge Objects
-#   Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
-#   to restore the knowledge object if it was deleted/changed to the filesystem
-# 
-###########################
+"""
+
+ Store Knowledge Objects
+   Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
+   to restore the knowledge object if it was deleted/changed to the filesystem
+ 
+"""
 
 #Define the XML scheme for the inputs page
 SCHEME = """<scheme>
@@ -133,21 +132,7 @@ def get_validation_data():
 # prints XML error data to be consumed by Splunk
 def print_error(s):
     print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
-
-#Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-def runOSProcess(command, timeout=20):
-    p = Popen(command, stdout=PIPE, stderr=PIPE, shell=True)
-    for t in xrange(timeout):
-        sleep(1)
-        if p.poll() is not None:
-            #return p.communicate()
-            (stdoutdata, stderrdata) = p.communicate()
-            if p.returncode != 0:
-                return stdoutdata, stderrdata, False
-            else:
-                return stdoutdata, stderrdata, True
-    p.kill()
-    return "", "timeout after %s seconds" % (timeout), False
+    logger.error(s)
 
 #Validate the arguments to the app to ensure this will work...
 def validate_arguments():
@@ -164,17 +149,17 @@ def validate_arguments():
             useLocalAuth = False
         else:
             print_error("useLocalAuth argument should be true or false, invalid config")
-            sys.exit(1)
+            sys.exit(2)
     
     #If we're not using the useLocalAuth we must have a username/password to work with
     if not useLocalAuth and ('srcUsername' not in val_data or 'srcPassword' not in val_data):
         print_error("useLocalAuth is not set to true and srcUsername/srcPassword not set, invalid config")
-        sys.exit(1)
+        sys.exit(3)
     
     appName = "SplunkVersionControl"
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
-    
+
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:
         url = val_data['srcURL'] + "/servicesNS/nobody/%s/search/jobs/export?search=makeresults" % (appName)
@@ -183,25 +168,28 @@ def validate_arguments():
         srcPassword = val_data['srcPassword']
         
         try:
+            logger.debug("Running query against URL %s with username %s" % (url, srcUsername))
             res = requests.get(url, auth=(srcUsername, srcPassword), verify=False)
+            logger.debug("End query against URL %s with username %s" % (url, srcUsername))
+
             if (res.status_code != requests.codes.ok):
                 print_error("Attempt to validate access to Splunk failed with code %s, reason %s, text %s, on URL %s" % (res.status_code, res.reason, res.text, url))
-                sys.exit(1)
+                sys.exit(4)
         except requests.exceptions.RequestException as e:
             print_error("Attempt to validate access to Splunk failed with error %s" % (e))
-            sys.exit(1)
+            sys.exit(5)
 
     gitRepoURL = val_data['gitRepoURL']
-    (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ])
+    (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ], logger)
     
     #If we didn't manage to ls-remote perhaps we just need to trust the fingerprint / this is the first run?
     if res == False:
-        (stdout, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")])
-        (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ])
+        (stdout, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
+        (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ], logger)
     
     if res == False:
         print_error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))
-        sys.exit(1)
+        sys.exit(6)
 
 #Print the scheme
 def do_scheme():

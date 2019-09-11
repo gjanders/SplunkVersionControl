@@ -47,3 +47,5 @@ useLocalAuth = <boolean>
 * do not use the srcUsername/srcPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false)
 remoteAppName = <value>
 * defaults to SplunkVersionControl, this app needs to contain the savedsearches and potentially the splunkversioncontrol_globalexclusionlist
+timewait = <value>
+* defaults to 600, if the kvstore contains an entry advising there is a restore running, how many seconds should pass before the entry is deleted and the restore happens anyway?
