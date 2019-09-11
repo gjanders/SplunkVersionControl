@@ -137,9 +137,13 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             remoteAppName = json_dict['remoteAppName']
         else:
             remoteAppName = "SplunkVersionControl"
-        
-        if 'timewait' in json_dict:
-            time_wait = int(json_dict['timewait'])
+
+        if 'timewait' in json_dict and json_dict['timewait'] != '':
+            try:
+                time_wait = int(json_dict['timewait'])
+            except ValueError:
+                logger.warn("Time wait value of %s is invalid, not an integer, defaulting to 600 seconds" % (json_dict['timewait']))
+                time_wait = 600
         else:
             time_wait = 600  
         
