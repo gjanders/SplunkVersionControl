@@ -144,11 +144,11 @@ def validate_arguments():
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
     
-    if 'timeout' in val_data:
+    if 'timewait' in val_data:
         try:
-            int(val_data['timeout'])
+            int(val_data['timewait'])
         except ValueError:
-            print_error("Unable to convert timeout field to a valid value, this must be an integer value in seconds, value provided was %s" % (val_data['timeout']))
+            print_error("Unable to convert timewait field to a valid value, this must be an integer value in seconds, value provided was %s" % (val_data['timewait']))
             sys.exit(1)
     
     #Run a sanity check and make sure we can connect into the remote Splunk instance
