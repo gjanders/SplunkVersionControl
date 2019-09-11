@@ -50,7 +50,6 @@ logging.getLogger().setLevel(logging.INFO)
     Finally, if this passes attempt to restore the object and return the results to the remote caller
 """
 
-
 class SVCRestore(splunk.rest.BaseRestHandler):
 
     def handle_POST(self):
@@ -59,7 +58,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         #self.response.write(str(payload) + "\n")
         #currently we only receive the Splunk authorization key, so obtain that
         
-        req_attributes = ['Authorization', 'splunk_vc_name', 'app', 'type', 'obj_name', 'tag', 'scope' ]
+        req_attributes = ['Authorization', 'splunk_vc_name', 'app', 'type', 'obj_name', 'tag', 'scope', 'timeout' ]
         for attr in req_attributes:
             if attr not in payload:
                 #Don't log the authorization key if it was sent
@@ -76,10 +75,9 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         url = "https://" + remoteAddr + ":8089/services/authentication/current-context?output_mode=json"
         logger.info("Received remote request checking username and role related to the token on url=%s" % (url))
         logger.debug("token=%s" % (payload['Authorization'][0]))
-        res = requests.get(url, verify=False, headers=headers)
-        if (res.status_code != requests.codes.ok):
-            logger.error("Unexpected response code while checking username with token on url=%s, statuscode=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text))
-            self.response.write("Error unexpected response code while checking username with token on url %s (based on incoming ip address), statuscode=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text))
+        
+        res = self.runHttpRequest(url, headers, None, "get", "checking username with token (based on incoming ip address)")
+        if not res:
             return
         
         json_dict = json.loads(res.text) 
@@ -99,10 +97,8 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         url = "https://localhost:8089/servicesNS/-/-/data/inputs/splunkversioncontrol_restore/" + urllib.quote(splunk_vc_name) + "?output_mode=json"
         logger.debug("Now running query against url=%s to obtain config information" % (url))
         
-        res = requests.get(url, verify=False, headers=headers)
-        if (res.status_code != requests.codes.ok):
-            logger.error("Unexpected response code while querying the inputs for splunkversioncontrol_restore with name %s, on url %s, statuscode=%s reason=%s, response=\"%s\"" % (splunk_vc_name, url, res.status_code, res.reason, res.text))
-            self.response.write("Error unexpected response code while querying the inputs for splunkversioncontrol_restore with name %s, on url %s, statuscode=%s reason=%s, response=\"%s\"" % (splunk_vc_name, url, res.status_code, res.reason, res.text))
+        res = self.runHttpRequest(url, headers, None, "get", "querying the inputs for splunkversioncontrol_restore with name %s" % (splunk_vc_name))
+        if not res:
             return
         
         #Look under the entry/content section for the relevant information we require, mainly destURL, useLocalAuth and potentially destUsername/destPassword
@@ -142,10 +138,16 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         else:
             remoteAppName = "SplunkVersionControl"
         
+        if 'timewait' in json_dict:
+            time_wait = int(json_dict['timewait'])
+        else:
+            time_wait = 600  
+        
         app = payload['app'][0]
         type = payload['type'][0]
         obj_name = payload['obj_name'][0]
         tag = payload['tag'][0]
+        timeout = payload['timeout'][0]
         
         if not 'restoreAsUser' in payload:
             restoreAsUser = ''
@@ -153,15 +155,17 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             restoreAsUser = payload['restoreAsUser'][0]
         scope = payload['scope'][0]
         
+        logger.debug("Converting timeout of argument %s to integer" % timeout)
+        timeout = int(timeout)
         #We need a little bit of time to index the _audit event that literally just happened
         #a 30 second delay is annoying but it appears to work...hardcoding this for now
-        logger.info("Sleeping for 30 seconds to wait for audit logs")
-        time.sleep(30)
+        logger.info("Sleeping for %s seconds to wait for audit logs" % (timeout))
+        time.sleep(timeout)
         logger.info("Sleep completed")
         #At this point we run a POST request to check the audit logs and ensure the user is allowed to run a restore....
         #TODO make this a POST request on the correct URL endpoint for the app?
         starttime = starttime-60
-        #FIXME
+        
         json_res = self.runSearchJob(destURL, remoteAppName, headers, auth, username, starttime)
 
         if 'error' in json_res:
@@ -179,6 +183,40 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             #Name is required as part of the config dictionary, session_key is used if useLocalAuth is true in the config
             json_dict['name'] = "splunkversioncontrol_restore://" + splunk_vc_name
             json_dict['session_key'] = self.request['systemAuth']
+
+            #Check current time and see if anyone is running a restore
+            headers = { "Authorization" : "Splunk " + self.request['systemAuth'] }
+            curtime = calendar.timegm(time.gmtime())
+            url = "https://localhost:8089/servicesNS/nobody/SplunkVersionControl/storage/collections/data/splunkversioncontrol_rest_restore_status"
+            res = self.runHttpRequest(url, headers, None, "get", "checking kvstore collection splunkversioncontrol_rest_restore_status")
+            if not res:
+                return 
+            
+            res = json.loads(res.text)
+            #An empty list is good in this case, we are safe to run, if not we have checks to do
+            if not len(res) == 0:
+                if not 'start_time' in res[0]:
+                    logger.warn("Warning invalid kvstore data, will wipe it and continue in collection splunkversioncontrol_rest_restore_status on url=%s, value returned res=\"%s\"" % (url, payload))
+                    self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status')
+                else:
+                    kvstore_start_time = res[0]['start_time']
+                    target_time = curtime - time_wait
+                    if kvstore_start_time < target_time:
+                        logger.warn("Found existing entry from %s but time is %s, this is past the limit of current time minus %s (%s)" % (kvstore_start_time, curtime, time_wait, target_time))
+                        #More than 10 minutes ago, delete the entry and move on
+                        self.runHttpRequest(url, headers, None, "delete", "wiping kvstore splunkversioncontrol_rest_restore_status due to record %s older than %s time period" % (kvstore_start_time, target_time))
+                    else:
+                        logger.warn("Attempted to run but found a running restore instance with time=%s and current_time=%s, will delete and move on after current_time_minus=%s" % (kvstore_start_time, curtime, time_wait))
+                        self.response.write("Attempted to run but found a running restore instance with time %s and current time is %s, will delete and move on after current time minus %s" % (kvstore_start_time, curtime, time_wait))
+                        return
+            
+            payload = json.dumps({ 'start_time': curtime })
+            headers['Content-Type'] = 'application/json'
+            #update kvstore with runtime
+            res = self.runHttpRequest(url, headers, payload, 'post', 'updating kvstore collection splunkversioncontrol_rest_restore_status')
+            if not res:
+                return res
+            
             result = svc_restore_obj.run_script(resList, json_dict)
             if result:
                 self.response.write("Restore has completed successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
@@ -186,14 +224,16 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             else:
                 self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
                 logger.warn("Restore has failed to successfully in app=%s, object of type=%s, with name=%s was restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s" % (app, type, obj_name, tag, scope, restoreAsUser, username))    
-
+            
+            self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run')
+    
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, url, appname, headers, auth, username, earliest_time):
         url = url + "/servicesNS/-/%s/search/jobs" % (appname)
         query = "savedsearch \"Splunk Version Control Audit Query POST\" username=\"%s\" | stats count | where count>0" % (username)
         logger.debug("Running requests.post() on url=%s query=\"%s\"" % (url, query))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot", "earliest_time" : earliest_time }
-        
+         
         res = requests.post(url, auth=auth, headers=headers, verify=False, data=data)
         if (res.status_code != requests.codes.ok):
             logger.error("url=%s status_code=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text))
@@ -208,4 +248,19 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 logger.info("messages from query=\"%s\" were messages=\"%s\"" % (query, res["messages"]))
             else:
                 logger.warn("messages from query=\"%s\" were messages=\"%s\"" % (query, res["messages"]))
+        return res
+
+    def runHttpRequest(self, url, headers, data, type, text):
+        if type == "delete":
+            res = requests.delete(url, headers=headers, verify=False)
+        elif type == "post":
+            res = requests.post(url, headers=headers, verify=False, data=data)
+        elif type == "get":
+            res = requests.get(url, headers=headers, verify=False)
+        
+        if (res.status_code != requests.codes.ok and res.status_code != 201):
+            logger.error("Unexpected response code while %s, on url=%s, statuscode=%s reason=%s, response=\"%s\", payload=\"%s\"" % (text, url, res.status_code, res.reason, res.text, data))
+            self.response.write("Error unexpected response code while %s, on url %s, statuscode %s reason %s, response \"%s\", payload=\"%s\"" % (text, url, res.status_code, res.reason, res.text, data))
+            return
+        
         return res

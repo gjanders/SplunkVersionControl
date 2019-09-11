@@ -70,6 +70,11 @@ SCHEME = """<scheme>
                 <description>defaults to SplunkVersionControl, this app needs to contain the savedsearches and potentially the splunkversioncontrol_globalexclusionlist</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="timewait">
+                <title>timewait</title>
+                <description>defaults to 600, if the kvstore contains an entry advising there is a restore running, how many seconds should pass before the entry is deleted and the restore happens anyway?</description>
+                <required_on_create>false</required_on_create>
+            </arg>
         </args>
     </endpoint>
 </scheme>
@@ -138,6 +143,13 @@ def validate_arguments():
     appName = "SplunkVersionControl"
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
+    
+    if 'timeout' in val_data:
+        try:
+            int(val_data['timeout'])
+        except ValueError:
+            print_error("Unable to convert timeout field to a valid value, this must be an integer value in seconds, value provided was %s" % (val_data['timeout']))
+            sys.exit(1)
     
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:

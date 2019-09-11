@@ -59,6 +59,7 @@ class SVCPostRestore(GeneratingCommand):
     tag = Option(require=True)
     restoreAsUser = Option(require=True)
     scope = Option(require=True)
+    timeout = Option(require=True)
     
     def generate(self):
         """
@@ -85,6 +86,7 @@ class SVCPostRestore(GeneratingCommand):
         body['tag'] = self.tag
         body['restoreAsUser'] = self.restoreAsUser
         body['scope'] = self.scope
+        body['timeout'] = self.timeout
         
         logger.info("Attempting POST request to url=%s with body=\"%s\"" % (url, body))
         

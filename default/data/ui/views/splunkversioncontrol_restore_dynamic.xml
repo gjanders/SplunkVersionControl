@@ -129,7 +129,7 @@
       <table>
         <title>SplunkVersionControl Results (please wait a few minutes for results)</title>
         <search>
-          <query>| postversioncontrolrestore app="$app$" obj_name="$name$" restoreAsUser="$restoreAsUser$" scope="$scope$" splunk_vc_name=Prod tag="$tag$" url=https://localhost:8089/services/splunkversioncontrol_rest_restore type="$type$"</query>
+          <query>| postversioncontrolrestore app="$app$" obj_name="$name$" restoreAsUser="$restoreAsUser$" scope="$scope$" splunk_vc_name=Prod tag="$tag$" url=https://localhost:8089/services/splunkversioncontrol_rest_restore type="$type$" timeout=30</query>
           <earliest>-5m</earliest>
           <latest>now</latest>
           <sampleRatio>1</sampleRatio>
