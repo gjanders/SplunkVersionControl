@@ -209,8 +209,10 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                         #More than 10 minutes ago, delete the entry and move on
                         self.runHttpRequest(url, headers, None, "delete", "wiping kvstore splunkversioncontrol_rest_restore_status due to record %s older than %s time period" % (kvstore_start_time, target_time))
                     else:
-                        logger.warn("Attempted to run but found a running restore instance with time=%s and current_time=%s, will delete and move on after current_time_minus=%s" % (kvstore_start_time, curtime, time_wait))
-                        self.response.write("Attempted to run but found a running restore instance with time %s and current time is %s, will delete and move on after current time minus %s" % (kvstore_start_time, curtime, time_wait))
+                        removal_target = kvstore_start_time + time_wait + 1
+                        logger.warn("Attempted to run but found a running restore instance with time=%s and current_time=%s, will delete and move on after current_time_minus=%s seconds (override_time=%s)" % (kvstore_start_time, curtime, time_wait, removal_target))
+                        self.response.write("Attempted to run but found a running restore instance with time %s and current time is %s, will delete and move on after current time minus %s seconds (which would be %s) " % (kvstore_start_time, curtime, time_wait, removal_target))
+                        self.response.write("Please try your restore request again in a minute...")
                         return
             
             payload = json.dumps({ 'start_time': curtime })
