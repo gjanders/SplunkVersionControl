@@ -114,10 +114,6 @@ def print_error(s):
     print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
     logger.error(s)
     
-#Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
-#    logger.warn("OS timeout after %s seconds while running %s" % (timeout, command))
-#    return "", "timeout after %s seconds" % (timeout), False
-
 #Validate the arguments to the app to ensure this will work...
 def validate_arguments():
     val_data = get_validation_data()
