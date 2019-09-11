@@ -166,9 +166,8 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         logger.info("Sleeping for %s seconds to wait for audit logs" % (timeout))
         time.sleep(timeout)
         logger.info("Sleep completed")
-        #At this point we run a POST request to check the audit logs and ensure the user is allowed to run a restore....
-        #TODO make this a POST request on the correct URL endpoint for the app?
-        starttime = starttime-60
+        
+        starttime = starttime-60-timeout
         
         json_res = self.runSearchJob(destURL, remoteAppName, headers, auth, username, starttime)
 
