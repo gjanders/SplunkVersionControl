@@ -1,6 +1,6 @@
 from subprocess import Popen, PIPE
-import Queue
 import threading
+import six.moves.queue
 
 #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
 #Had inconsistent results using Popen without a threaded process
@@ -22,7 +22,7 @@ def runOSProcess(command, logger, timeout=20):
             q.put(True)
 
     #Keep the arguments in the queue for use once the thread finishes
-    q = Queue.Queue()
+    q = six.moves.queue.Queue()
     thread = threading.Thread(target=target, args=(q,))
     thread.daemon=False
     thread.start()

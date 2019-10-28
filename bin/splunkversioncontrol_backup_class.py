@@ -13,6 +13,7 @@ from requests.auth import HTTPBasicAuth
 import xml.dom.minidom
 from datetime import datetime,timedelta
 import shutil
+from io import open
 from splunkversioncontrol_utility import runOSProcess
 
 """
@@ -110,9 +111,9 @@ class SplunkVersionControlBackup:
                                 logger.debug("i=\"%s\" XML: \"%s\"=\"%s\"" % (shortName, param_name, data))
 
             if not config:
-                raise Exception, "Invalid configuration received from Splunk."
-        except Exception, e:
-            raise Exception, "Error getting Splunk configuration via STDIN: %s" % str(e)
+                raise Exception("Invalid configuration received from Splunk.")
+        except Exception as e:
+            raise Exception("Error getting Splunk configuration via STDIN: %s" % str(e))
 
         return config
 
@@ -208,7 +209,7 @@ class SplunkVersionControlBackup:
                         info["name"] = title
                         #Backup the original name if we override it, override works fine for creation
                         #but updates require the original name
-                        if 'name' in aliasAttributes.values():
+                        if 'name' in list(aliasAttributes.values()):
                             info["origName"] = title
                         
                         logger.debug("i=\"%s\" name=\"%s\" is the entry for type=%s in app=%s" % (self.stanzaName, title, type, app))
@@ -268,7 +269,7 @@ class SplunkVersionControlBackup:
                                 attribName = theAttribute.attrib['name']
                                 
                                 #Under some circumstances we want the attribute and contents but we want to call it a different name...
-                                if aliasAttributes.has_key(attribName):
+                                if attribName in aliasAttributes:
                                     attribName = aliasAttributes[attribName]
                                 
                                 #If it's disabled *and* we don't want disabled objects we can determine this here
@@ -279,7 +280,7 @@ class SplunkVersionControlBackup:
                                     
                                 #Field extractions change from "Uses transform" to "REPORT" And "Inline" to "EXTRACTION" for some strange reason...
                                 #therefore we have a list of attribute values that we deal with here which get renamed to the provided values
-                                if valueAliases.has_key(theAttribute.text):
+                                if theAttribute.text in valueAliases:
                                     theAttribute.text = valueAliases[theAttribute.text]
                                 
                                 logger.debug("i=\"%s\" name=\"%s\" of type=%s found key/value of %s=%s in app context app=%s" % (self.stanzaName, info["name"], type, attribName, theAttribute.text, app))
@@ -290,7 +291,7 @@ class SplunkVersionControlBackup:
                                     attribName = "accelerated_fields" + attribName[17:]
                                 
                                 #Hack to deal with datamodel tables not working as expected
-                                if attribName == "description" and type=="datamodels" and info.has_key("dataset.type") and info["dataset.type"] == "table":
+                                if attribName == "description" and type=="datamodels" and "dataset.type" in info and info["dataset.type"] == "table":
                                     #For an unknown reason the table datatype has extra fields in the description which must be removed
                                     #however we have to find them first...
                                     res = json.loads(theAttribute.text)
@@ -348,16 +349,16 @@ class SplunkVersionControlBackup:
 
                     #Some attributes are not used to create a new version so we remove them...(they may have been used above first so we kept them until now)
                     for attribName in fieldIgnoreList:
-                        if info.has_key(attribName):
+                        if attribName in info:
                             del info[attribName]
                     
                     #Add this to the infoList
                     sharing = info["sharing"]
-                    if not infoList.has_key(sharing):
+                    if sharing not in infoList:
                         infoList[sharing] = []
                         
                     #REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
-                    if type == "fieldtransformations" and info.has_key("FORMAT") and info["FORMAT"] == "nullQueue":
+                    if type == "fieldtransformations" and "FORMAT" in info and info["FORMAT"] == "nullQueue":
                         logger.info("i=\"%s\" Dropping the backup of name=\"%s\" of type=%s in app context app=%s with owner=%s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     else:
                         infoList[sharing].append(info)
@@ -376,7 +377,7 @@ class SplunkVersionControlBackup:
         
         #Cycle through each one we need to backup, we do global/app/user as users can duplicate app level objects with the same names
         #but we create everything at user level first then re-own it so global/app must happen first
-        if infoList.has_key("global"):            
+        if "global" in infoList:
             #persist global to disk
             globalStorageDir = appStorageDir + "/global"
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=%s with sharing=global in app=%s into dir=%s" % (self.stanzaName, type, app, globalStorageDir))
@@ -384,7 +385,7 @@ class SplunkVersionControlBackup:
                 os.mkdir(globalStorageDir)
             with open(globalStorageDir + "/" + type, 'w') as f:
                 json.dump(infoList["global"], f, sort_keys=True)
-        if infoList.has_key("app"):
+        if "app" in infoList:
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s with sharing=app in app=%s into dir=%s" % (self.stanzaName, type, app, appLevelStorageDir))
@@ -392,7 +393,7 @@ class SplunkVersionControlBackup:
                 os.mkdir(appLevelStorageDir)
             with open(appLevelStorageDir + "/" + type, 'w') as f:
                 json.dump(infoList["app"], f, sort_keys=True)
-        if infoList.has_key("user"):
+        if "user" in infoList:
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s sharing=user (private) in app=%s into dir=%s" % (self.stanzaName, type, app, userLevelStorageDir))
@@ -514,7 +515,7 @@ class SplunkVersionControlBackup:
                 if keep:
                     #Add this to the infoList
                     sharing = macroInfo["sharing"]
-                    if not macros.has_key(sharing):
+                    if sharing not in macros:
                         macros[sharing] = []
                     macros[sharing].append(macroInfo)
                     
@@ -536,7 +537,7 @@ class SplunkVersionControlBackup:
         
         #Cycle through each one we need to migrate, we do global/app/user as users can duplicate app level objects with the same names
         #but we create everything at user level first then re-own it so global/app must happen first
-        if macros.has_key("global"):
+        if "global" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=global in app=%s" % (self.stanzaName, app))
             #persist global to disk
             globalStorageDir = appStorageDir + "/global"
@@ -544,7 +545,7 @@ class SplunkVersionControlBackup:
                 os.mkdir(globalStorageDir)
             with open(globalStorageDir + "/macros", 'w') as f:
                 json.dump(macros["global"], f, sort_keys=True)
-        if macros.has_key("app"):
+        if "app" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=app in app=%s" % (self.stanzaName, app))
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
@@ -552,7 +553,7 @@ class SplunkVersionControlBackup:
                 os.mkdir(appLevelStorageDir)
             with open(appLevelStorageDir + "/macros", 'w') as f:
                 json.dump(macros["app"], f, sort_keys=True)
-        if macros.has_key("user"):
+        if "user" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=user (private) in app %s" % (self.stanzaName, app))
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"

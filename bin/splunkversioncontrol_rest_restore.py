@@ -2,8 +2,8 @@ import splunk
 import json
 import traceback
 import requests
-import urlparse
-import urllib
+import six.moves.urllib.parse
+import six.moves.urllib.request, six.moves.urllib.parse, six.moves.urllib.error
 from requests.auth import HTTPBasicAuth
 import logging
 from logging.config import dictConfig
@@ -54,7 +54,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
 
     def handle_POST(self):
         starttime = calendar.timegm(time.gmtime())
-        payload = urlparse.parse_qs(self.request['payload'])
+        payload = six.moves.urllib.parse.parse_qs(self.request['payload'])
         #self.response.write(str(payload) + "\n")
         #currently we only receive the Splunk authorization key, so obtain that
         
@@ -94,7 +94,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         
         #Now run queries locally to check if the mentioned config matches an existing backup name
         headers = { "Authorization" : "Splunk " + self.request['systemAuth'] }
-        url = "https://localhost:8089/servicesNS/-/-/data/inputs/splunkversioncontrol_restore/" + urllib.quote(splunk_vc_name) + "?output_mode=json"
+        url = "https://localhost:8089/servicesNS/-/-/data/inputs/splunkversioncontrol_restore/" + six.moves.urllib.parse.quote(splunk_vc_name) + "?output_mode=json"
         logger.debug("Now running query against url=%s to obtain config information" % (url))
         
         res = self.runHttpRequest(url, headers, None, "get", "querying the inputs for splunkversioncontrol_restore with name %s" % (splunk_vc_name))

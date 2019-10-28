@@ -1,3 +1,4 @@
+from __future__ import print_function
 import requests
 import xml.etree.ElementTree as ET
 import logging
@@ -131,7 +132,7 @@ def get_validation_data():
 
 # prints XML error data to be consumed by Splunk
 def print_error(s):
-    print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
+    print("<error><message>%s</message></error>" % xml.sax.saxutils.escape(s))
     logger.error(s)
 
 #Validate the arguments to the app to ensure this will work...
@@ -193,8 +194,8 @@ def validate_arguments():
 
 #Print the scheme
 def do_scheme():
-    print SCHEME
-    
+    print(SCHEME)    
+
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
 logging_config = dict(

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import requests
 import xml.etree.ElementTree as ET
 import logging
@@ -111,9 +112,13 @@ def get_validation_data():
 
 # prints XML error data to be consumed by Splunk
 def print_error(s):
-    print "<error><message>%s</message></error>" % xml.sax.saxutils.escape(s)
+    print("<error><message>%s</message></error>" % xml.sax.saxutils.escape(s))
     logger.error(s)
     
+#Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
+#    logger.warn("OS timeout after %s seconds while running %s" % (timeout, command))
+#    return "", "timeout after %s seconds" % (timeout), False
+
 #Validate the arguments to the app to ensure this will work...
 def validate_arguments():
     val_data = get_validation_data()
@@ -140,11 +145,11 @@ def validate_arguments():
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
     
-    if 'timewait' in val_data:
+    if 'timeout' in val_data:
         try:
-            int(val_data['timewait'])
+            int(val_data['timeout'])
         except ValueError:
-            print_error("Unable to convert timewait field to a valid value, this must be an integer value in seconds, value provided was %s" % (val_data['timewait']))
+            print_error("Unable to convert timeout field to a valid value, this must be an integer value in seconds, value provided was %s" % (val_data['timeout']))
             sys.exit(1)
     
     #Run a sanity check and make sure we can connect into the remote Splunk instance
@@ -178,7 +183,7 @@ def validate_arguments():
     
 #Print the scheme
 def do_scheme():
-    print SCHEME
+    print(SCHEME)
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
