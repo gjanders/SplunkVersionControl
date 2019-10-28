@@ -15,6 +15,7 @@ from datetime import datetime,timedelta
 import shutil
 from io import open
 from splunkversioncontrol_utility import runOSProcess
+import six
 
 """
  
@@ -383,24 +384,24 @@ class SplunkVersionControlBackup:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=%s with sharing=global in app=%s into dir=%s" % (self.stanzaName, type, app, globalStorageDir))
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
-            with open(globalStorageDir + "/" + type, 'w') as f:
-                json.dump(infoList["global"], f, sort_keys=True)
+            with open(globalStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(infoList["global"], sort_keys=True)))
         if "app" in infoList:
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s with sharing=app in app=%s into dir=%s" % (self.stanzaName, type, app, appLevelStorageDir))
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
-            with open(appLevelStorageDir + "/" + type, 'w') as f:
-                json.dump(infoList["app"], f, sort_keys=True)
+            with open(appLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(infoList["app"], f, sort_keys=True)))
         if "user" in infoList:
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s sharing=user (private) in app=%s into dir=%s" % (self.stanzaName, type, app, userLevelStorageDir))
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
-            with open(userLevelStorageDir + "/" + type, 'w') as f:
-                json.dump(infoList["user"], f, sort_keys=True)
+            with open(userLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(infoList["user"], sort_keys=True)))
         return creationSuccess
 
     ###########################
@@ -543,24 +544,24 @@ class SplunkVersionControlBackup:
             globalStorageDir = appStorageDir + "/global"
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
-            with open(globalStorageDir + "/macros", 'w') as f:
-                json.dump(macros["global"], f, sort_keys=True)
+            with open(globalStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(macros["global"], sort_keys=True)))
         if "app" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=app in app=%s" % (self.stanzaName, app))
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
-            with open(appLevelStorageDir + "/macros", 'w') as f:
-                json.dump(macros["app"], f, sort_keys=True)
+            with open(appLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(macros["app"], sort_keys=True)))
         if "user" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=user (private) in app %s" % (self.stanzaName, app))
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
-            with open(userLevelStorageDir + "/macros", 'w') as f:
-                json.dump(macros["user"], f, sort_keys=True)
+            with open(userLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(macros["user"], sort_keys=True)))
             
         return macroCreationSuccess
 
@@ -1253,7 +1254,7 @@ class SplunkVersionControlBackup:
 
         if not gitFailure:
             #Output the time we did the run so we know where to continue from at next runtime
-            with open(versionControlFile, 'w') as checkpointFile:
+            with open(versionControlFile, 'w', encoding="utf-8") as checkpointFile:
                 checkpointFile.write("%s" % (currentEpochTime))
             logger.info("i=\"%s\" lastrun_epoch=%s written to checkpoint file=%s" % (self.stanzaName, currentEpochTime, versionControlFile))
         else:
