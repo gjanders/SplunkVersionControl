@@ -13,6 +13,7 @@ from requests.auth import HTTPBasicAuth
 import xml.dom.minidom
 import datetime
 import shutil
+from io import open
 from splunkversioncontrol_utility import runOSProcess
 
 """
@@ -104,10 +105,10 @@ class SplunkVersionControlRestore:
                                 logger.debug("i=\"%s\" XML: \"%s\"=\"%s\"" % (shortName, param_name, data))
 
             if not config:
-                raise Exception, "Invalid configuration received from Splunk."
-        except Exception, e:
-            raise Exception, "Error getting Splunk configuration via STDIN: %s" % str(e)
-
+                raise Exception("Invalid configuration received from Splunk.")
+        except Exception as e:
+            raise Exception("Error getting Splunk configuration via STDIN: %s" % str(e))
+        
         return config
        
     ###########################
@@ -381,7 +382,7 @@ class SplunkVersionControlRestore:
         
         #Hack to handle the times (conf-times) not including required attributes for creation in existing entries
         #not sure how this happens but it fails to create in 7.0.5 but works fine in 7.2.x, fixing for the older versions
-        if type=="times_conf-times" and not payload.has_key("is_sub_menu"):
+        if type=="times_conf-times" and "is_sub_menu" not in payload:
             payload["is_sub_menu"] = "0"
         elif type=="collections_kvstore" and 'disabled' in payload:
             del payload['disabled']
@@ -417,7 +418,7 @@ class SplunkVersionControlRestore:
                             logger.debug("i=\"%s\" name=%s of type=%s in app=%s URL=%s" % (self.stanzaName, name, type, app, objURL))
                 elif child.tag.endswith("messages"):
                     for innerChild in child:
-                        if innerChild.tag.endswith("msg") and innerChild.attrib["type"]=="ERROR" or innerChild.attrib.has_key("WARN"):
+                        if innerChild.tag.endswith("msg") and innerChild.attrib["type"]=="ERROR" or "WARN" in innerChild.attrib:
                             logger.warn("i=\"%s\" name=%s of type=%s in app=%s had a warn/error message of '%s' owner=%s" % (self.stanzaName, name, type, app, innerChild.text, owner))
                             #Sometimes the object appears to be create but is unusable which is annoying, at least provide the warning to the logs
             
