@@ -141,6 +141,12 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.9
+Version 1.0.8 caused an issue where the checkpoint file stopped getting created, fixed in this version
+
+### 1.0.8
+1.0.8 has Splunk 8 / python 3 changes only
+
 ### 1.0.7
 This version has a few major changes:
 - Restoration immediately after clicking the restore button rather than using lookup files
