@@ -1255,7 +1255,7 @@ class SplunkVersionControlBackup:
         if not gitFailure:
             #Output the time we did the run so we know where to continue from at next runtime
             with open(versionControlFile, 'w', encoding="utf-8") as checkpointFile:
-                checkpointFile.write("%s" % (currentEpochTime))
+                checkpointFile.write(six.text_type(currentEpochTime))
             logger.info("i=\"%s\" lastrun_epoch=%s written to checkpoint file=%s" % (self.stanzaName, currentEpochTime, versionControlFile))
         else:
             logger.error("i=\"%s\" git failure occurred during runtime, not updating the epoch value. This failure  may require investigation, please refer to the WARNING messages in the logs" % (self.stanzaName))
