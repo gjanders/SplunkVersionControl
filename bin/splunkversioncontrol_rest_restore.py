@@ -2,8 +2,6 @@ import splunk
 import json
 import traceback
 import requests
-import six.moves.urllib.parse
-import six.moves.urllib.request, six.moves.urllib.parse, six.moves.urllib.error
 from requests.auth import HTTPBasicAuth
 import logging
 from logging.config import dictConfig
@@ -11,6 +9,11 @@ import os
 import time
 import calendar
 from splunkversioncontrol_restore_class import SplunkVersionControlRestore
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
+
+import splunklib.six.moves.urllib.parse
+import splunklib.six.moves.urllib.request, splunklib.six.moves.urllib.error
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging

@@ -141,6 +141,9 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.10
+Changed import to use local Splunk python SDK to ensure this works on older Splunk versions
+
 ### 1.0.9
 Version 1.0.8 caused an issue where the checkpoint file stopped getting created, fixed in this version
 
