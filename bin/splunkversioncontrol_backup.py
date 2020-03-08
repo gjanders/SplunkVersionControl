@@ -96,6 +96,11 @@ SCHEME = """<scheme>
                 <description>defaults to SplunkVersionControl, this app needs to contain the savedsearches and potentially the splunkversioncontrol_globalexclusionlist</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="appsList">
+                <title>appsList</title>
+                <description>Comma separated list of apps, this changes Splunk Version Control to not list all applications and instead only runs a backup on the specified apps. Useful for Splunk Cloud where you cannot access the apps REST endpoint</description>
+                <required_on_create>false</required_on_create>
+            </arg>
         </args>
     </endpoint>
 </scheme>
@@ -191,6 +196,7 @@ def validate_arguments():
     if res == False:
         print_error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))
         sys.exit(6)
+
 
 #Print the scheme
 def do_scheme():

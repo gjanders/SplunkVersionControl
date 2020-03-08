@@ -995,12 +995,15 @@ class SplunkVersionControlBackup:
         cleanArgs = self.without_keys(config, excludedList)
         logger.info("i=\"%s\" Splunk Version Control Backup run with arguments=%s" % (self.stanzaName, cleanArgs))
 
+        #Use current epoch to output a checkpoint file at the end
+        #If we have not run before just backup everything
         currentEpochTime = calendar.timegm(time.gmtime())
         self.session_key = config['session_key']
         
-        #Use current epoch to output lookup at the end
-        #use lookup to check if we have run before, if so run queries if not just backup everything
-        appList = self.getAllAppsList()
+        if 'appsList' in config and config['appsList']!="":
+            appList = [app.strip() for app in appList.split(',')]
+        else:
+            appList = self.getAllAppsList()
 
         logger.debug("i=\"%s\" AppList is (before trim) %s" % (self.stanzaName, appList))
         self.removeExcludedApps(appList)

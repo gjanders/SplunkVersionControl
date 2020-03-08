@@ -1,5 +1,7 @@
 from subprocess import Popen, PIPE
 import threading
+import sys
+import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 

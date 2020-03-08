@@ -27,6 +27,8 @@ useLocalAuth = <boolean>
 * do not use the srcUsername/srcPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false)
 remoteAppName = <value>
 * defaults to SplunkVersionControl, this app needs to contain the savedsearches and potentially the splunkversioncontrol_globalexclusionlist
+appsList = <value>
+* Comma separated list of apps, this changes Splunk Version Control to not list all applications and instead only runs a backup on the specified apps. Useful for Splunk Cloud where you cannot access the apps REST endpoint
 
 [splunkversioncontrol_restore://<name>]
 destURL = <value>
