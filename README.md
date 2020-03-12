@@ -111,6 +111,8 @@ Or the internal index which also has these log files
 - If running on a search head cluster, the modular input must run on a standalone Splunk instance (non-clustered)
 - If errors are seen when creating the modular inputs see the troubleshooting below, or raise a question on SplunkAnswers for assistance
 - If you are running the newer `splunkversioncontrol_restore_dynamic` dashboard the macros `splunk_vc_name`, `splunk_vc_url`, `splunk_vc_timeout` may need customisation to match your environment 
+- Ensure the directory where the git repository will be cloned to is empty (i.e. the git clone can create it)
+- Ensure the git repository has at least 1 commit (i.e. it is initialized and a git checkout master will work if you clone the git repo)
 
 ## Macros
 The following macros exist and are relate to the `splunkversioncontrol_restore_dynamic` dashboard
@@ -123,6 +125,12 @@ In some Linux OS distributions an error similar to `OPENSSL_1.0.0 not found` may
 
 If you have this issue please add this into the python files to workaround the problem as required
 Refer to [this issue on github](https://github.com/gjanders/SplunkVersionControl/issues/3) for more details
+
+Note that you can run this from the command line if the logs are not getting populated:
+
+`splunk cmd splunkd print-modinput-config splunkversioncontrol_backup splunkversioncontrol_backup://<your_input_name_goes_here>`
+
+Finally the log files are mentioned under the "Where are the logs?" section of this document
 
 ### Problems with the Splunk Version Control Restore or Splunk Version Control Backup modular input
 Both inputs follow a similar validation process:
@@ -141,6 +149,10 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.11
+Corrected errors in the import of the six library which stopped this from working
+Minor updates to README.md
+
 ### 1.0.10
 Changed import to use local Splunk python SDK to ensure this works on older Splunk versions
 Added the (experimental) apps list option to attempt to make this work with Splunk Cloud instances 
