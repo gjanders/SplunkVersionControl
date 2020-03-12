@@ -12,8 +12,7 @@ from splunkversioncontrol_restore_class import SplunkVersionControlRestore
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-import splunklib.six.moves.urllib.parse
-import splunklib.six.moves.urllib.request, splunklib.six.moves.urllib.error
+from splunklib import six
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
