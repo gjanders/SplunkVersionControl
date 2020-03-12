@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-import splunklib.six.moves.queue
+from splunklib import six
 
 #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
 #Had inconsistent results using Popen without a threaded process
