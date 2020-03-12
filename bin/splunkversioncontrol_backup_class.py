@@ -17,7 +17,7 @@ from io import open
 from splunkversioncontrol_utility import runOSProcess
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from splunklib import six
+from splunklib import six.text_type
 
 """
  
