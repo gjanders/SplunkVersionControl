@@ -110,9 +110,11 @@ Or the internal index which also has these log files
 - If running on a standalone server the modular inputs can be configured either on the current standalone server, or another remote server, the app will work either way
 - If running on a search head cluster, the modular input must run on a standalone Splunk instance (non-clustered)
 - If errors are seen when creating the modular inputs see the troubleshooting below, or raise a question on SplunkAnswers for assistance
-- If you are running the newer `splunkversioncontrol_restore_dynamic` dashboard the macros `splunk_vc_name`, `splunk_vc_url`, `splunk_vc_timeout` may need customisation to match your environment 
+- If you are running the newer `splunkversioncontrol_restore_dynamic` dashboard the macros `splunk_vc_name`, `splunk_vc_url`, `splunk_vc_timeout` may need customisation to match your environment. In particular the `splunk_vc_name` assumes you have called your SplunkVersionControlRestore modular input "Prod"
 - Ensure the directory where the git repository will be cloned to is empty (i.e. the git clone can create it)
 - Ensure the git repository has at least 1 commit (i.e. it is initialized and a git checkout master will work if you clone the git repo)
+- When you create the Splunk Version Control Backup (via Settings -> Data Inputs -> Splunk Version Control Backup), click "More settings" and set the backup interval you would like (tags will only be created if config has changed within Splunk)
+- When you create the Splunk Version Control Restore (via Settings -> Data Inputs -> Splunk Version Control Restore), if you are using the newer `splunkversioncontrol_restore_dynamic` dashboard then you do not need to set a run interval, if you are using the older method you want to run this on an interval to check if the lookup file has been updated and if a restore is required...
 
 ## Macros
 The following macros exist and are relate to the `splunkversioncontrol_restore_dynamic` dashboard
@@ -149,6 +151,12 @@ You could also run the input on a single search head cluster member but this is 
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
 ## Release Notes 
+### 1.0.12
+Fixed missing sys import from `splunkversioncontrol_rest_restore.py`
+Updated README.md instructions 
+Updated python SDK to version 1.6.12
+Updated inputs.conf.spec and restmap.conf to specify python3 as the default version to pass appinspect
+
 ### 1.0.11
 Corrected errors in the import of the six library which stopped this from working
 Minor updates to README.md
