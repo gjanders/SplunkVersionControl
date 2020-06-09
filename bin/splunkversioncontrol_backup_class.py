@@ -14,7 +14,8 @@ import xml.dom.minidom
 from datetime import datetime,timedelta
 import shutil
 from io import open
-from splunkversioncontrol_utility import runOSProcess
+import platform
+from splunkversioncontrol_utility import runOSProcess, get_password
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib import six
@@ -125,7 +126,7 @@ class SplunkVersionControlBackup:
         appList = []
         url = self.splunk_rest + "/services/apps/local?search=disabled%3D0&count=0&f=title"
 
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s to obtain a list of all applications" % (self.stanzaName, url, self.srcUsername))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s proxies_length=%s to obtain a list of all applications" % (self.stanzaName, url, self.srcUsername, len(self.proxies)))
         #no srcUsername, use the session_key method    
         headers = {}
         auth = None
@@ -136,7 +137,7 @@ class SplunkVersionControlBackup:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
         
         #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False)
+        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.fatal("i=\"%s\" Could not obtain a list of all apps, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
             sys.exit(-1)
@@ -179,7 +180,7 @@ class SplunkVersionControlBackup:
         #Keep a success list to be returned by this function
         #Use count=-1 to ensure we see all the objects
         url = self.splunk_rest + "/servicesNS/-/" + app + endpoint + "?count=-1"
-        logger.debug("i=\"%s\" Running requests.get() on %s user=%s in app=%s" % (self.stanzaName, url, self.srcUsername, app))
+        logger.debug("i=\"%s\" Running requests.get() on %s user=%s in app=%s proxies_length=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies)))
 
         headers = {}
         auth = None
@@ -190,7 +191,7 @@ class SplunkVersionControlBackup:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
         
         #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False)
+        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
         
@@ -367,7 +368,9 @@ class SplunkVersionControlBackup:
                         infoList[sharing].append(info)
                         logger.info("i=\"%s\" Recording name=\"%s\" info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     
-                    epochUpdatedTime = long(self.determineTime(updated).strftime("%s"))
+                    logger.debug("Updated time is updated=%s" % (updated))
+                    epochUpdatedTime = long((self.determineTime(updated) - datetime(1970,1,1)).total_seconds())
+                    logger.debug("epochUpdatedTime=%s" % (epochUpdatedTime))
                     if self.lastRunEpoch == None or long(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, info["name"], type, app, info["owner"], updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, info["name"], type, app, info["owner"], updated, epochUpdatedTime, self.lastRunEpoch))
@@ -421,7 +424,7 @@ class SplunkVersionControlBackup:
         #servicesNS/-/-/properties/macros doesn't show private macros so using /configs/conf-macros to find all the macros
         #again with count=-1 to find all the available macros
         url = self.splunk_rest + "/servicesNS/-/" + app + "/configs/conf-macros?count=-1"
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type macro" % (self.stanzaName, url, self.srcUsername, app))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type macro proxies_length=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies)))
         
         headers = {}
         auth = None
@@ -431,7 +434,7 @@ class SplunkVersionControlBackup:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
         
         #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False)
+        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" Type macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
         
@@ -525,8 +528,9 @@ class SplunkVersionControlBackup:
                     #Updated time was for our reference only, don't try to send that in while creating/updating the object
                     updated = macroInfo["updated"]
                     del macroInfo["updated"]
-                    
-                    epochUpdatedTime = long(self.determineTime(updated).strftime("%s"))
+
+                    logger.debug("Updated time is updated=%s" % (updated))
+                    epochUpdatedTime = long((self.determineTime(updated) - datetime(1970,1,1)).total_seconds())
                     if self.lastRunEpoch == None or long(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, macroInfo["name"], app, owner, updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, macroInfo["name"], app, owner, updated, epochUpdatedTime, self.lastRunEpoch))
@@ -735,7 +739,7 @@ class SplunkVersionControlBackup:
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, query):
         url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
-        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\"" % (self.stanzaName, url, self.srcUsername, query))
+        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\" proxies_length=%s" % (self.stanzaName, url, self.srcUsername, query, len(self.proxies)))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot" }
         
         #no srcUsername, use the session_key method    
@@ -745,7 +749,7 @@ class SplunkVersionControlBackup:
             headers = {'Authorization': 'Splunk %s' % self.session_key }
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=data)
+        res = requests.post(url, auth=auth, headers=headers, verify=False, data=data, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
@@ -983,12 +987,40 @@ class SplunkVersionControlBackup:
         if useLocalAuth == False:
             self.srcUsername = config['srcUsername']
             self.srcPassword = config['srcPassword']
-        
+
         if 'remoteAppName' in config:
             self.appName = config['remoteAppName']
         
         self.gitRepoURL = config['gitRepoURL']
-        
+
+        if 'git_command' in config:
+            self.git_command = config['git_command']
+            logger.debug("Overriding git command to %s" % (self.git_command))
+        else:
+            self.git_command = "git"
+        if 'ssh_command' in config:
+            self.ssh_command = config['ssh_command']
+            logger.debug("Overriding ssh command to %s" % (self.ssh_command))
+        else:
+            self.ssh_command = "ssh"
+
+        if platform.system() == "Windows":
+            self.windows = True
+        else:
+            self.windows = False
+
+        proxies = {}
+        if 'proxy' in config:
+            proxies['https'] = config['proxy']
+            if proxies['https'].find("password:") != -1:
+                start = proxies['https'].find("password:") + 9
+                end = proxies['https'].find("@")
+                logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
+                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
+
+        self.proxies = proxies
+
         #From server
         self.splunk_rest = config['srcURL']
         excludedList = [ "srcPassword", "session_key" ]
@@ -1000,8 +1032,11 @@ class SplunkVersionControlBackup:
         currentEpochTime = calendar.timegm(time.gmtime())
         self.session_key = config['session_key']
         
+        if self.srcPassword.find("password:") == 0:
+            self.srcPassword = get_password(self.srcPassword[9:], self.session_key, logger)
+
         if 'appsList' in config and config['appsList']!="":
-            appList = [app.strip() for app in appList.split(',')]
+            appList = [app.strip() for app in config['appsList'].split(',')]
         else:
             appList = self.getAllAppsList()
 
@@ -1015,25 +1050,29 @@ class SplunkVersionControlBackup:
         self.gitRootDir = config['gitTempDir']
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
-            #include the subdirectory which is the git repo
-            self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+            if os.listdir(self.gitTempDir)[0] != ".git":
+                #include the subdirectory which is the git repo
+                self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+                logger.debug("gitTempDir=%s" % (self.gitTempDir))
         else:
             if not dirExists:
                 #make the directory and clone under here
                 os.mkdir(self.gitTempDir)
             #Initially we must trust our remote repo URL
-            (output, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
+            (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
-            (output, stderrout, res) = runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
+            (output, stderrout, res) = runOSProcess("%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir), logger, timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
-                self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
-            
+                if os.listdir(self.gitTempDir)[0] != ".git":
+                    #include the subdirectory which is the git repo
+                    self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+                    logger.debug("gitTempDir=%s" % (self.gitTempDir))
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1094,11 +1133,17 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
         
         #Always start from master and the current version (just in case changes occurred)
-        (output, stderrout, res) = runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), logger, timeout=300)
+        if self.windows:
+            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+        else:
+            (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'. Wiping git directory" % (self.stanzaName, output, stderrout))
             shutil.rmtree(self.gitTempDir)
-            (output, stderrout, res) = runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
+            if self.windows:
+                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+            else:
+                (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1227,11 +1272,17 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" Completed working with app=%s" % (self.stanzaName, app))
 
         #Always start from master and the current version (just in case someone was messing around in the temp directory)
-        (output, stderrout, res) = runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), logger, timeout=300)
+        if self.windows:
+            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+        else:
+            (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, output, stderrout))
             shutil.rmtree(self.gitTempDir)
-            (output, stderrout, res) = runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
+            if self.windows:
+                (output, stderrout, res) = runOSProcess("cd /d %s & %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
+            else:
+                (output, stderrout, res) = runOSProcess("cd %s; %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1243,11 +1294,17 @@ class SplunkVersionControlBackup:
             gitFailure = True
         
         #At this point we've written out the potential updates
-        (output, stderrout, res) = runOSProcess("cd %s; git status | grep \"nothing to commit\"" % (self.gitTempDir), logger)
+        if self.windows:
+            (output, stderrout, res) = runOSProcess("cd /d %s & %s status | findstr /C:\"nothing to commit\"" % (self.gitTempDir, self.git_command), logger, shell=True)
+        else:
+            (output, stderrout, res) = runOSProcess("cd %s; %s status | grep \"nothing to commit\"" % (self.gitTempDir, self.git_command), logger, shell=True)
         if res == False:
             #We have one or more files to commit, do something
             todaysDate = datetime.now().strftime("%Y-%m-%d_%H%M")
-            (output, stderrout, res) = runOSProcess("cd {0}; git add -A; git commit -am \"Updated by Splunk Version Control backup job {1}\"; git tag {2}; git push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate), logger, timeout=300)
+            if self.windows:
+                (output, stderrout, res) = runOSProcess("cd /d {0} & {3} add -A & {3} commit -am \"Updated by Splunk Version Control backup job {1}\" & {3} tag {2} & {3} push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command), logger, timeout=300, shell=True)
+            else:
+                (output, stderrout, res) = runOSProcess("cd {0}; {3} add -A; {3} commit -am \"Updated by Splunk Version Control backup job {1}\"; {3} tag {2}; {3} push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command), logger, timeout=300, shell=True)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             

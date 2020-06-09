@@ -7,7 +7,7 @@ import os
 import sys
 import xml.dom.minidom, xml.sax.saxutils
 from splunkversioncontrol_backup_class import SplunkVersionControlBackup
-from splunkversioncontrol_utility import runOSProcess
+from splunkversioncontrol_utility import runOSProcess, get_password
 
 """
 
@@ -31,17 +31,17 @@ SCHEME = """<scheme>
             </arg>
             <arg name="srcUsername">
                 <title>srcUsername</title>
-                <description>username to use for REST API of srcURL argument (only required if not using useLocalAuth)</description>
+                <description>username to use for REST API of srcURL argument (required if not using useLocalAuth)</description>
                 <required_on_create>false</required_on_create>
             </arg>
             <arg name="srcPassword">
                 <title>srcPassword</title>
-                <description>password to use for REST API of srcURL argument (only required if not using useLocalAuth)</description>
+                <description>password to use for REST API of srcURL argument (required if not using useLocalAuth). If started with password: the name after the : symbol (password:mypass) is searched for in passwords.conf</description>
                 <required_on_create>false</required_on_create>
             </arg>
             <arg name="gitTempDir">
                 <title>gitTempDir</title>
-                <description>location where to store the output of the script on the filesystem</description>
+                <description>location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)</description>
             </arg>
             <arg name="gitRepoURL">
                 <title>gitRepoURL</title>
@@ -49,13 +49,13 @@ SCHEME = """<scheme>
             </arg>
             <arg name="noPrivate">
                 <title>noPrivate</title>
-                <description>disable the backup of user level / private objects (true/false)</description>
+                <description>disable the backup of user level / private objects (true/false), default false</description>
                 <validation>is_bool('noPrivate')</validation>
                 <required_on_create>false</required_on_create>
             </arg>
             <arg name="noDisabled">
                 <title>noDisabled</title>
-                <description>disable the backup of objects with a disabled status in Splunk (true/false)</description>
+                <description>disable the backup of objects with a disabled status in Splunk (true/false), default false</description>
                 <validation>is_bool('noDisabled')</validation>
                 <required_on_create>false</required_on_create>
             </arg>
@@ -81,24 +81,39 @@ SCHEME = """<scheme>
             </arg>
             <arg name="debugMode">
                 <title>debugMode</title>
-                <description>turn on DEBUG level logging (defaults to INFO) (true/false)</description>
+                <description>turn on DEBUG level logging (defaults to INFO) (true/false), default false</description>
                 <validation>is_bool('debugMode')</validation>
                 <required_on_create>false</required_on_create>
             </arg>
             <arg name="useLocalAuth">
                 <title>useLocalAuth</title>
-                <description>Instead of using the srcUsername/srcPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false)</description>
+                <description>Instead of using the srcUsername/srcPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false), default false</description>
                 <validation>is_bool('useLocalAuth')</validation>
                 <required_on_create>false</required_on_create>
             </arg>
             <arg name="remoteAppName">
                 <title>remoteAppName</title>
-                <description>defaults to SplunkVersionControl, this app needs to contain the savedsearches and potentially the splunkversioncontrol_globalexclusionlist</description>
+                <description>defaults to SplunkVersionControl, this app needs to contain the savedsearches and potentially the splunkversioncontrol_globalexclusionlist, use SplunkVersionControlCloud on a cloud-based instance</description>
                 <required_on_create>false</required_on_create>
             </arg>
             <arg name="appsList">
                 <title>appsList</title>
-                <description>Comma separated list of apps, this changes Splunk Version Control to not list all applications and instead only runs a backup on the specified apps. Useful for Splunk Cloud where you cannot access the apps REST endpoint</description>
+                <description>Comma separated list of apps, this changes Splunk Version Control to not list all applications and instead only runs a backup on the specified apps</description>
+                <required_on_create>false</required_on_create>
+            </arg>
+            <arg name="git_command">
+                <title>git_command</title>
+                <description>defaults to 'git', can be overriden (for example on a Windows server) to use a full path to the git command</description>
+                <required_on_create>false</required_on_create>
+            </arg>
+            <arg name="ssh_command">
+                <title>ssh_command</title>
+                <description>defaults to 'ssh', can be overriden (for example on a Windows server) to use a full path to the ssh command</description>
+                <required_on_create>false</required_on_create>
+            </arg>
+            <arg name="proxy">
+                <title>proxy</title>
+                <description>If supplied provides a proxy setting to use to access the srcURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
                 <required_on_create>false</required_on_create>
             </arg>
         </args>
@@ -116,6 +131,8 @@ def get_validation_data():
     # parse the validation XML
     doc = xml.dom.minidom.parseString(val_str)
     root = doc.documentElement
+    session_key = root.getElementsByTagName("session_key")[0].firstChild.data
+    val_data['session_key'] = session_key
 
     logger.debug("XML: found items")
     item_node = root.getElementsByTagName("item")[0]
@@ -143,6 +160,14 @@ def print_error(s):
 #Validate the arguments to the app to ensure this will work...
 def validate_arguments():
     val_data = get_validation_data()
+    
+    if 'debugMode' in val_data:
+        debugMode = val_data['debugMode'].lower()
+        if debugMode == "true" or debugMode == "t":
+            logging.getLogger().setLevel(logging.DEBUG)
+
+    session_key = val_data['session_key']
+
     useLocalAuth = False
     if 'useLocalAuth' in val_data:
         useLocalAuth = val_data['useLocalAuth'].lower()
@@ -166,16 +191,39 @@ def validate_arguments():
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
 
+    if 'git_command' in val_data:
+        git_command = val_data['git_command']
+        logger.debug("Overriding git command to %s" % (git_command))
+    else:
+        git_command = "git"
+    if 'ssh_command' in val_data:
+        ssh_command = val_data['ssh_command']
+        logger.debug("Overriding ssh command to %s" % (ssh_command))
+    else:
+        ssh_command = "ssh"
+
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:
         url = val_data['srcURL'] + "/servicesNS/nobody/%s/search/jobs/export?search=makeresults" % (appName)
         #Verify=false is hardcoded to workaround local SSL issues
         srcUsername = val_data['srcUsername']
         srcPassword = val_data['srcPassword']
-        
+        if srcPassword.find("password:") == 0:
+            srcPassword = get_password(srcPassword[9:], session_key, logger)
+
+        proxies = {}
+        if 'proxy' in val_data:
+            proxies["https"] = val_data['proxy']
+            if proxies['https'].find("password:") != -1:
+                start = proxies['https'].find("password:") + 9
+                end = proxies['https'].find("@")
+                logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
+                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
+
         try:
-            logger.debug("Running query against URL %s with username %s" % (url, srcUsername))
-            res = requests.get(url, auth=(srcUsername, srcPassword), verify=False)
+            logger.debug("Running query against URL %s with username %s proxies_length=%s" % (url, srcUsername, len(proxies)))
+            res = requests.get(url, auth=(srcUsername, srcPassword), verify=False, proxies=proxies)
             logger.debug("End query against URL %s with username %s" % (url, srcUsername))
 
             if (res.status_code != requests.codes.ok):
@@ -186,12 +234,11 @@ def validate_arguments():
             sys.exit(5)
 
     gitRepoURL = val_data['gitRepoURL']
-    (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ], logger)
-    
+    (stdout, stderr, res) = runOSProcess("%s ls-remote %s" % (git_command, gitRepoURL), logger)
     #If we didn't manage to ls-remote perhaps we just need to trust the fingerprint / this is the first run?
     if res == False:
-        (stdout, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
-        (stdout, stderr, res) = runOSProcess(["git ls-remote %s" % (gitRepoURL) ], logger)
+        (stdout, stderrout, res) = runOSProcess(ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
+        (stdout, stderr, res) = runOSProcess("%s ls-remote %s" % (git_command, gitRepoURL), logger)
     
     if res == False:
         print_error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))

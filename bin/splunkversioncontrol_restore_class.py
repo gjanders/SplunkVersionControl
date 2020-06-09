@@ -14,7 +14,8 @@ import xml.dom.minidom
 import datetime
 import shutil
 from io import open
-from splunkversioncontrol_utility import runOSProcess
+import platform
+from splunkversioncontrol_utility import runOSProcess, get_password
 
 """
  Restore Knowledge Objects
@@ -133,7 +134,7 @@ class SplunkVersionControlRestore:
         else:
             url = self.splunk_rest + "/servicesNS/-/%s%s/%s?output_mode=json" % (app, endpoint, name)
         
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s" % (self.stanzaName, url, self.destUsername, app))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s proxies_length=%s" % (self.stanzaName, url, self.destUsername, app, len(self.proxies)))
 
         #Determine scope that we will attempt to restore
         appScope = False
@@ -157,7 +158,7 @@ class SplunkVersionControlRestore:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
         
         #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False)
+        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
         objExists = False
         
         #If we get 404 it definitely does not exist or it has a name override 
@@ -335,9 +336,9 @@ class SplunkVersionControlRestore:
             origName = config['origName']
             del config['origName']
             objExistsURL = "%s/%s?output_mode=json" % (url, origName)
-            logger.debug("i=\"%s\" URL=%s re-checking object exists URL due to name override from %s to original name of %s" % (self.stanzaName, objExistsURL, name, origName))
+            logger.debug("i=\"%s\" URL=%s re-checking object exists URL due to name override from %s to original name of %s proxies_length=%s" % (self.stanzaName, objExistsURL, name, origName, len(self.proxies)))
             #Verify=false is hardcoded to workaround local SSL issues
-            res = requests.get(objExistsURL, auth=auth, headers=headers, verify=False)
+            res = requests.get(objExistsURL, auth=auth, headers=headers, verify=False, proxies=self.proxies)
         
             #If we get 404 it definitely does not exist or it has a name override 
             if (res.status_code == 404):
@@ -387,15 +388,15 @@ class SplunkVersionControlRestore:
         elif type=="collections_kvstore" and 'disabled' in payload:
             del payload['disabled']
         
-        logger.debug("i=\"%s\" Attempting to %s type=%s with name=%s on URL=%s with payload=\"%s\" in app=%s" % (self.stanzaName, createOrUpdate, type, name, url, payload, app))
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
+        logger.debug("i=\"%s\" Attempting to %s type=%s with name=%s on URL=%s with payload=\"%s\" in app=%s proxies_length=%s" % (self.stanzaName, createOrUpdate, type, name, url, payload, app, len(self.proxies)))
+        res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
         if (res.status_code != requests.codes.ok and res.status_code != 201):
             logger.error("i=\"%s\" user=%s, name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, user, name, type, url, res.status_code, res.reason, res.text, app, owner))
             #Saved Searches sometimes fail due to the VSID field, auto-retry in case that solves the problem...
             if type=="savedsearches":
                 if 'vsid' in payload:
                     del payload['vsid']
-                    res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
+                    res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
                     if (res.status_code != requests.codes.ok and res.status_code != 201):
                         logger.error("i=\"%s\" user=%s, re-attempted without vsid but result for name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, user, name, type, url, res.status_code, res.reason, res.text, app, owner))
                         result = False
@@ -430,7 +431,7 @@ class SplunkVersionControlRestore:
             url = "%s/acl" % (objURL)
             payload = { "owner": owner, "sharing" : sharing }
             logger.info("i=\"%s\" Attempting to change ownership of type=%s with name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanzaName, type, name, url, owner, app, sharing))
-            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
+            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
             
             #If re-own fails log this for investigation
             if (res.status_code != requests.codes.ok):
@@ -487,7 +488,7 @@ class SplunkVersionControlRestore:
             #servicesNS/-/search/properties/macros
             #__stanza = <name>
             
-            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
+            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
             if (res.status_code != requests.codes.ok and res.status_code != 201):
                 logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text, owner))
                 return False
@@ -512,8 +513,8 @@ class SplunkVersionControlRestore:
         del config["owner"]
         payload = config
         
-        logger.debug("i=\"%s\" Attempting to modify type=macro name=%s on URL=%s with payload=\"%s\" in app=%s" % (self.stanzaName, name, url, payload, app))
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
+        logger.debug("i=\"%s\" Attempting to modify type=macro name=%s on URL=%s with payload=\"%s\" in app=%s proxies_length=%s" % (self.stanzaName, name, url, payload, app, len(self.proxies)))
+        res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
         if (res.status_code != requests.codes.ok and res.status_code != 201):
             logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text))
             result = False
@@ -522,7 +523,7 @@ class SplunkVersionControlRestore:
             url = "%s/servicesNS/%s/%s/configs/conf-macros/%s/acl" % (self.splunk_rest, owner, app, name)
             payload = { "owner": owner, "sharing" : sharing }
             logger.info("i=\"%s\" Attempting to change ownership of type=macro name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanzaName, name, url, owner, app, sharing))
-            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload)
+            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
             if (res.status_code != requests.codes.ok):
                 logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s sharing=%s" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text, owner, sharing))
             else:
@@ -542,7 +543,7 @@ class SplunkVersionControlRestore:
         #servicesNS/-/-/properties/macros doesn't show private macros so using /configs/conf-macros to find all the macros
         #again with count=-1 to find all the available macros
         url = self.splunk_rest + "/servicesNS/-/" + app + "/configs/conf-macros/" + name + "?output_mode=json"
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type=macro" % (self.stanzaName, url, self.destUsername, app))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type=macro proxies_length=%s" % (self.stanzaName, url, self.destUsername, app, len(self.proxies)))
         
         #Determine scope that we will attempt to restore
         appScope = False
@@ -565,7 +566,7 @@ class SplunkVersionControlRestore:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
         
         #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False)
+        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
         objExists = False
         if (res.status_code == 404):
             logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, url))
@@ -813,7 +814,7 @@ class SplunkVersionControlRestore:
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, query, earliest_time="-1h"):
         url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
-        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\"" % (self.stanzaName, url, self.destUsername, query))
+        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\" proxies_length=%s" % (self.stanzaName, url, self.destUsername, query, len(self.proxies)))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot", "earliest_time" : earliest_time }
         
         #no destUsername, use the session_key method
@@ -824,7 +825,7 @@ class SplunkVersionControlRestore:
         else:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
         
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=data)
+        res = requests.post(url, auth=auth, headers=headers, verify=False, data=data, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
@@ -892,35 +893,71 @@ class SplunkVersionControlRestore:
         logger.info("i=\"%s\" Splunk Version Control Restore run with arguments=\"%s\"" % (self.stanzaName, cleanArgs))
 
         self.session_key = config['session_key']
-        
+
+        if self.destPassword.find("password:") == 0:
+            self.destPassword = get_password(self.destPassword[9:], self.session_key, logger)
+
         knownAppList = []
         self.gitTempDir = config['gitTempDir']
         self.gitRootDir = config['gitTempDir']
-         
+
+        if 'git_command' in config:
+            self.git_command = config['git_command']
+            logger.debug("Overriding git command to %s" % (self.git_command))
+        else:
+            self.git_command = "git"
+        if 'ssh_command' in config:
+            self.ssh_command = config['ssh_command']
+            logger.debug("Overriding ssh command to %s" % (self.ssh_command))
+        else:
+            self.ssh_command = "ssh"
+
         gitFailure = False
         
+        if platform.system() == "Windows":
+            self.windows = True
+        else:
+            self.windows = False
+
+        proxies = {}
+        if 'proxy' in config:
+            proxies['https'] = config['proxy']
+            if proxies['https'].find("password:") != -1:
+                start = proxies['https'].find("password:") + 9
+                end = proxies['https'].find("@")
+                logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
+                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
+
+        self.proxies = proxies
+
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
-            #include the subdirectory which is the git repo
-            self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+            if os.listdir(self.gitTempDir)[0] != ".git":
+                #include the subdirectory which is the git repo
+                self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+                logger.info("gitTempDir=%s" % (self.gitTempDir))
         else:
             if not dirExists:
                 #make the directory and clone under here
                 os.mkdir(self.gitTempDir)
             #Initially we must trust our remote repo URL
-            (output, stderrout, res) = runOSProcess("ssh -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
+            (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             #Clone the remote git repo
-            (output, stderrout, res) = runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
+            (output, stderrout, res) = runOSProcess("%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir), logger, timeout=300)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
             else:
                 logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
                 logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
-                self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+                if os.listdir(self.gitTempDir)[0] != ".git":
+                    #include the subdirectory which is the git repo
+                    self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
+                    logger.debug("gitTempDir=%s" % (self.gitTempDir))
             
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1: 
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
@@ -938,11 +975,17 @@ class SplunkVersionControlRestore:
             logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
             #Do a git pull to ensure we are up-to-date
-            (output, stderrout, res) = runOSProcess("cd %s; git checkout master; git pull" % (self.gitTempDir), logger, timeout=300)
+            if self.windows:
+                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+            else:
+                (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
             if res == False:
                 logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 shutil.rmtree(self.gitTempDir)
-                (output, stderrout, res) = runOSProcess("cd %s; git clone %s" % (self.gitRootDir, self.gitRepoURL), logger, timeout=300)
+                if self.windows:
+                    (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+                else:
+                    (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
                 if res == False:
                     logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                     sys.exit(1)
@@ -1052,7 +1095,10 @@ class SplunkVersionControlRestore:
                     continue
                 
                 #Do a git pull to ensure we are up-to-date
-                (output, stderrout, res) = runOSProcess("cd %s; git checkout %s" % (self.gitTempDir, tag), logger)
+                if self.windows:
+                    (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s" % (self.gitTempDir, self.git_command, tag), logger, shell=True)
+                else:
+                    (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s" % (self.gitTempDir, self.git_command, tag), logger, shell=True)
                 if res == False:
                     logger.error("i=\"%s\" user=%s, object name=%s, type=%s, time=%s, git checkout of tag=%s failed in directory dir=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, user, name, type, time, tag, self.gitTempDir, output, stderrout))
                 else:
@@ -1122,10 +1168,9 @@ class SplunkVersionControlRestore:
                     res = self.runSearchJob("| makeresults | fields - _time | outputlookup %s" % (restoreList))
                     logger.info("i=\"%s\" Cleared the lookup file to ensure we do not attempt to restore the same entries again" % (self.stanzaName))
                 else:
-                    logger.error("i=\"%s\" git failure occurred during runtime, not wiping the lookup value. This failure  may require investigation, please refer to the WARNING messages in the logs" % (self.stanzaName))                                                
+                    logger.error("i=\"%s\" git failure occurred during runtime, not wiping the lookup value. This failure  may require investigation, please refer to the WARNING messages in the logs" % (self.stanzaName))
         if gitFailure:
             logger.warn("i=\"%s\" wiping the git directory, dir=%s to allow re-cloning on next run of the script" % (self.stanzaName, self.gitTempDir))
             shutil.rmtree(self.gitTempDir)
         
         logger.info("i=\"%s\" Done" % (self.stanzaName))
-        return result
