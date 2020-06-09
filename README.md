@@ -24,6 +24,8 @@ Use the SplunkVersionControl Restore dashboard to request that a knowledge objec
 There are two unique dashboards with two different restoration methods, the original version is described below:
 When a knowledge object restore is requested the dashboard (SplunkVersionControl Restore) outputs the knowledge object information to a lookup with the definition splunkversioncontrol_restorelist. The modular input then triggers the restore based on the contents of this lookup, the modular input either creates or updates the knowledge object with the requested git tag, or logs the failure to find the object in the logs.
 
+Note that the above option is the option used with Splunk Cloud, the below option can be used on on-prem instances...
+
 The newer dynamic version follows a similar process, but instead of adding the knowledge object restore information to a lookup file it runs a Splunk custom command `postversioncontrolrestore` that hits a REST endpoint on either a local or a remote server.
 The REST endpoint then performs a few functions:
 - Queries the source system and passes in the authentication token of the current user, this includes restore information and the `splunkversioncontrol_restore` input stanza name
@@ -54,14 +56,16 @@ If a user attempts to restore the objects of another user, or attempts to restor
 ## Why use a lookup file and not trigger a remote command execution?
 A custom command named postversioncontrolrestore and the accompanying dashboard `splunkversioncontrolrestore_dynamic` were created for this purpose in version 1.0.7
 
+However this version wil not work in Splunk Cloud as it would require connectivity to an on-prem instance that can perform the backup/restore modular input functions
+
 ## What is required for this application to work with a remote git repository?
 The following assumptions are made:
-- git is accessible on the command line, this has been tested on Linux only
+- git is accessible on the command line, this has been tested on Linux & Windows with git for Windows installed 
 - git is using an SSH-based URL and the remote git repository allows the machine running the SplunkVersionControl application to remotely access the repository without a username/password prompt (i.e. SSH keys are in use)
 - git will work from the user running the Splunk process over SSH, note that on Windows this will be the system account by default, on Linux the splunk user
 
 ## Do the modular input backup and restore tasks need to be on the same Splunk instance?
-No. However, the backup/restore modular input must have access to its own git temporary directory on the OS filesystem.
+No. However, the backup/restore modular input must have access to its own git temporary directory on the OS filesystem, the temporary directory should be unique for both backup and restore operations
 
 ## When will a full application backup occur?
 During the first run of the script (at which point the lookup file is empty) all applications and all objects will be backed up.
@@ -91,7 +95,7 @@ Once checked out, the app/user/global directories are checked (depending on whic
 
 ## What other lookup files are used by the app?
 - `splunkversioncontrol_globalexclusionlist`, this lookup definition records a list of excluded applications
-- `splunkversioncontrol_restorelist`, this lookup definition records what must be restored by the restore modular input
+- `splunkversioncontrol_restorelist`, this lookup definition records what must be restored by the restore modular input (this is used by the non-dynamic dashboard)
 - `splunkversioncontrol_taglist`, this lookup definition records the tags available in git
 
 ## Where are the logs?
@@ -101,25 +105,92 @@ On a Linux-based system
 - `/opt/splunk/var/log/splunk/splunkversioncontrol_postversioncontrolrestore.log` -- this log contains information about the | postversioncontrol command
 - `/opt/splunk/var/log/splunk/splunkversioncontrol_rest_restore.log` -- log log contains information about hits to the REST endpoint `/services/splunkversioncontrol_rest_restore`
 
-Or the internal index which also has these log files
+Or the internal index which also has these log files with the sourcetype splunkversioncontrol
 
 ## Installation guide
-- If running on a search head cluster or not running the modular inputs on the local instance, install the SplunkVersionControl app on the remote search head or search head cluster first
+### Standalone instance
+- Install this application on the Splunk standalone instance, if you are going to access a remote instance please ensure you can access the remote instance on port 8089 
 - Create a new git repo and initialise the repo (it can have a README or can it be empty, but it must be at a point where the master branch exists)
 - The server doing the git backup must have SSH access to the repo without a username/password (in other words you need to have the SSH key setup so a git clone/git checkout/git push) all work without a prompt for credentials as the OS user running Splunk (as the modular input will run as this user)
 - If running on a standalone server the modular inputs can be configured either on the current standalone server, or another remote server, the app will work either way
-- If running on a search head cluster, the modular input must run on a standalone Splunk instance (non-clustered)
 - If errors are seen when creating the modular inputs see the troubleshooting below, or raise a question on SplunkAnswers for assistance
-- If you are running the newer `splunkversioncontrol_restore_dynamic` dashboard the macros `splunk_vc_name`, `splunk_vc_url`, `splunk_vc_timeout` may need customisation to match your environment. In particular the `splunk_vc_name` assumes you have called your SplunkVersionControlRestore modular input "Prod"
+- If you are running the newer `splunkversioncontrol_restore_dynamic` dashboard the macros `splunk_vc_name`, `splunk_vc_url`, `splunk_vc_timeout` may need customisation to match your environment. In particular the `splunk_vc_name` assumes you have called your SplunkVersionControlRestore modular input "Prod". See the macros section of this document for more information
 - Ensure the directory where the git repository will be cloned to is empty (i.e. the git clone can create it)
 - Ensure the git repository has at least 1 commit (i.e. it is initialized and a git checkout master will work if you clone the git repo)
 - When you create the Splunk Version Control Backup (via Settings -> Data Inputs -> Splunk Version Control Backup), click "More settings" and set the backup interval you would like (tags will only be created if config has changed within Splunk)
 - When you create the Splunk Version Control Restore (via Settings -> Data Inputs -> Splunk Version Control Restore), if you are using the newer `splunkversioncontrol_restore_dynamic` dashboard then you do not need to set a run interval, if you are using the older method you want to run this on an interval to check if the lookup file has been updated and if a restore is required...
 
+### Search head cluster (on prem)
+- Install the SplunkVersionControl application on the SHC via the deployer as normal but do not configure the modular inputs on the search head cluster
+- Run the modular inputs on a standalone instance using the above instructions, and set the srcURL and destURL to a search head cluster member (or a load balanced REST port of the SHC)
+
+### Splunk Cloud
+- Install this application as per the standalone instance documentation above onto a non-SplunkCloud instance, install the VersionControl For SplunkCloud on the SplunkCloud instance
+- Note that in SplunkCloud the only option is the `splunkversioncontrol_restore` dashboard, the dynamic dashboard cannot be used in SplunkCloud
+- Configure the remoteAppName within the Splunk Version Control Backup & Splunk Version Control Restore modular inputs to "SplunkVersionControlCloud"
+
+## How do I initialize a git repository?
+github and other websites may offer to initlize the repository for you, if they do not the steps are usually similar to:
+- git clone git@<website>:testing.git
+- cd testing
+- touch README.md
+- git add README.md
+- git commit -m "add README"
+- git push -u origin master
+
+There are also many online resources to help with learning git
+
+## What do the parameters do?
+### Splunk Version Control Backup
+- srcURL - URL of the remote or local Splunk instance that should be backed up, this needs to point to the REST port of the instance (port 8089)
+- srcUsername - the username to use on the instance to login
+- srcPassword - the password to use on the instance to login, use `password:<name in passwords.conf>` and the app will attempt to find the password in your passwords.conf file
+- gitTempDir - a directory that the git clone will create, and potentially be deleted. For example /tmp/git_backup or e:\temp\git_backup 
+- gitRepoURL - an SSH based git repo URL where the backup will be stored of the knowledge objects
+- noPrivate - optional, defaults to false, if set to true will not backup private knowledge objects
+- noDisabled - optional, defaults to false, if set to true will not backup disabled objects
+- includeEntities - optional, mainly for testing, only include knowledge objects with the names listed here, can be a comma separated list or a single name
+- excludeEntities - optional, mainly for testing, exclude knowledge objects with the names listed here, can be a comma separated list or a single name
+- includeOwner - optional, only include knowledge objects owned by the particular user listed here, can be a comma separated list or a single name
+- excludeOwner - optional, exclude knowledge objects owned by the particular user listed here, can be a comma separated list or a single name
+- debugMode - optional, defaults to false, if set to true outputs DEBUG level logs to splunkversioncontrol_backup.log
+- useLocalAuth - optional, defaults to false, only set this to "true" if you are using the srcURL of https://localhost:8089, this does not require a srcUsername/srcPassword as local authentication is used
+- remoteAppName - optional, defaults to "SplunkVersionControl", if you have renamed the application on the srcURL instance, update this to the new application name
+- appsList - optional, by default this app will backup knowledge objects from all apps that are not in the `splunkversioncontrol_globalexclusionlist` lookup file, if an application name is specified only the application is backed up, can be a comma separted list
+- git_command - optional, the location of the git command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk
+- ssh_command - optional, the location of the ssh command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk
+- proxy - optional, if supplied provides a proxy setting to use to access the srcURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry "passwordinpasswordsconf". If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
+
+"More settings"
+- interval - how often the backup should run, if not set the backup will only run on restart of the Splunk instance or when you save this configuration...
+
+### Splunk Version Control Restore
+- destURL - URL of the remote or local Splunk instance that should be queried for restores, this needs to point to the REST port of the instance (port 8089)
+- destUsername - the username to use on the instance to login
+- destPassword - the password to use on the instance to login, use `password:<name in passwords.conf>` and the app will attempt to find the password in your passwords.conf file
+- gitTempDir - a directory that the git clone will create, and potentially be deleted. For example /tmp/git_restore or e:\temp\git_restore
+- gitRepoURL - an SSH based git repo URL which will be used to checkout the required tag to restore from 
+- auditLogsLookupBackTime - optional, defaults to -1h, this is the earliest time to pass to the savedsearch `"SplunkVersionControl Audit Query"` to confirm the restore request came from the search head, this must be in Splunk format (-10m, -1h or similar)
+- debugMode - optional, defaults to false, if set to true outputs DEBUG level logs to splunkversioncontrol_restore.log
+- useLocalAuth - optional, defaults to false, only use this to "true" if you are using the srcURL of https://localhost:8089, this does not require a srcUsername/srcPassword as local authentication is used
+- remoteAppName - optional, defaults to "SplunkVersionControl", if you have renamed the application on the srcURL instance, update this to the new application name
+- timewait - optional, defaults to 600, this only relates to the dynamic restore dashboard. If the kvstore on the instance advises a restore is in progress, how many seconds should pass before it is assumed the restore has failed and to allow another REST restore to run?
+- git_command - optional, the location of the git command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk
+- ssh_command - optional, the location of the ssh command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk 
+- proxy - optional, if supplied provides a proxy setting to use to access the destURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry "passwordinpasswordsconf". If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
+
+"More settings"
+- interval - how often should the remote server be checked to see if a restore is required. If you are on-prem and using the dynamic restore dashboard you do not need to set an interval, if this is a cloud based system or using the non-dynamic dashboard this is the interval to check the remote server for if a restore needs to be run (i.e. how long it is between a user requesting a restore and this script checking/polling the remote system to run the restoration job)
+
+### Additional notes
+To get passwords into or out of the passwords.conf you may wish to use https://splunkbase.splunk.com/app/4013/
+
+The context of the application name (default of SplunkVersionControl) will be checked first for the password, if that fails a query to all contexts /-/-/ will occur, realms will be ignored, only the name of the password is used for searching so any realm (or lack of realm) will work for storing the password
+
 ## Macros
 The following macros exist and are relate to the `splunkversioncontrol_restore_dynamic` dashboard
 - `splunk_vc_name` - this macro is the name of the `splunkversioncontrol_restore` modular input name on the remote (or local) system where the restore occurs
-- `splunk_vc_url` - this macro is the URL endpoint of the remote system, defaults to `https://localhost:8089/services/splunkversioncontrol_rest_restore` 
+- `splunk_vc_url` - this macro is the URL endpoint of the remote system, defaults to `https://localhost:8089/services/splunkversioncontrol_rest_restore`, you will need to change this if you have a remote instance performing the backup/restore operations, for example if you are on a search head cluster 
 - `splunk_vc_timeout` - this is the time delay between triggering the remote command and waiting for the `_audit` index to catchup with a log entry to advise the command was run, if set too short the restore may fail because the `| postversioncontrolrestore` search has not appeared in the `_audit` index yet
 
 ## Troubleshooting
@@ -144,13 +215,66 @@ Both inputs follow a similar validation process:
 In 7.3.0 the Splunk process will kill -9 the modular input if it takes more than 30 seconds, if this occurs you can bypass validation by updating the inputs.conf file manually
 
 ## Will this work on a search head cluster?
-No, modular inputs run on each member at the same time which would not work well...however you can use a standalone server to backup/restore to a search head cluster.
-You could also run the input on a single search head cluster member but this is not a recommended solution
+Yes but do not configure the modular inputs to run on the search head cluster, modular inputs run on each member at the same time which would not work well. What you want to do is configure a standalone server with the modular inputs for backup/restore and set the srcURL/destURL to the remote search head cluster member (or load balanced URL) on the REST port.
+
+This would allow the modular inputs to run backup/restore and any customers to use the dashboard on the search head cluster member to request restoration of a knowledge object
+
+## Can I use this application on Windows?
+Yes, but there are some tricks involved as I have not yet integrated python git libraries into the application, I'm using the command line!
+
+The first is that the SSH key is still required to access the remote repository, the VersionControl app assumes you can run git clone without a password
+In my testing, the SYSTEM users SSH key directory was:
+`C:\Windows\System32\config\systemprofile\.ssh`
+
+Furthermore the `id_rsa` file within that directory had to have permissions changed on it so only the SYSTEM account had access and no one else...
+
+Furthermore, the git/ssh command may not be in the PATH of the sytem user, and this is fine, you can use the `git_command` and `ssh_command` options to point them to your git installation directory, I installed the https://gitforwindows.org/ package into e:\temp\git, I set the two settings to:
+`E:\temp\git\cmd\git.exe`
+`E:\temp\Git\usr\bin\ssh.exe`
+
+Note there is ssh in Windows 10 but it did not work with the same switches as the Unix SSH so I've used the above in testing
+Furthermore I needed to use a system user command line window which I opened via:
+psexec –i –s CMD 
+
+And set the git global configuration
+`git config --global user.name "John Doe"`
+`git config --global user.email johndoe@example.com`
+
+
+Finally, I found that the git temporary directory often fails to delete on Windows, since this is done under error conditions it should not be an issue in day to day operation, but I'd recommend using a Linux server if at all possible!
+
+## Can I use this on a Splunk Cloud instance?
+
+This application, no. But this application can be used to backup a SplunkCloud instance from a remote Splunk instance, the same remote instance could also be used to restore to the SplunkCloud instance.
+
+To do this you will need to install Version Control For SplunkCloud on your SplunkCloud instance, and setup this application on a remote instance configuring an interval for both the Splunk Version Control Backup and Splunk Version Control Restore modular inputs
 
 ## SplunkBase Link
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
 
+[VersionControl For SplunkCloud (stripped down version of this app for SplunkCloud)](https://splunkbase.splunk.com/app/5061)
+
+## Github Links
+[SplunkVersionControl github](https://github.com/gjanders/SplunkVersionControl)
+
+[SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
+
 ## Release Notes 
+### 1.1.0
+Now tested on Windows and Splunk Cloud (note this version of the app is not installed on SplunkCloud, the VersionControl for SplunkCloud is the app to install on the SplunkCloud instance, this variation of the app includes only what is required to remotely backup/restore a SplunkCloud instance
+
+This app is still used for SplunkCloud instances, but this app is installed on-prem
+
+Updates include:
+- Updated python SDK to 1.6.13
+- New options in both backup & restore so that you can specify the location of the git / SSH command
+- The ability to only backup particular apps by default rather than to backup all and rely on an exclusion list (appsList)
+- Support for passwords.conf instead of plain text passwords
+- Proxy support
+- Re-wrote the runOSProcess function so that it works on Windows as expected
+
+The README.md has had various updates including more details around setup and how this was tested on Windows
+
 ### 1.0.12
 Fixed missing sys import from `splunkversioncontrol_rest_restore.py`
 Updated README.md instructions 
