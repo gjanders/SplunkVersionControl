@@ -173,6 +173,7 @@ def validate_arguments():
         useLocalAuth = val_data['useLocalAuth'].lower()
         if useLocalAuth == "true" or useLocalAuth == "t":
             useLocalAuth = True
+            logger.debug("useLocalAuth enabled")
             if val_data['srcURL'] != "https://localhost:8089":
                 print_error("Expected srcURL of https://localhost:8089 since useLocalAuth=True")
                 sys.exit(1)
@@ -186,18 +187,18 @@ def validate_arguments():
     if not useLocalAuth and ('srcUsername' not in val_data or 'srcPassword' not in val_data):
         print_error("useLocalAuth is not set to true and srcUsername/srcPassword not set, invalid config")
         sys.exit(3)
-    
+
     appName = "SplunkVersionControl"
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
 
     if 'git_command' in val_data:
-        git_command = val_data['git_command']
+        git_command = val_data['git_command'].strip()
         logger.debug("Overriding git command to %s" % (git_command))
     else:
         git_command = "git"
     if 'ssh_command' in val_data:
-        ssh_command = val_data['ssh_command']
+        ssh_command = val_data['ssh_command'].strip()
         logger.debug("Overriding ssh command to %s" % (ssh_command))
     else:
         ssh_command = "ssh"

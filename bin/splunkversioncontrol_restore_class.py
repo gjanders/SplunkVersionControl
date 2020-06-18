@@ -865,6 +865,7 @@ class SplunkVersionControlRestore:
             useLocalAuth = config['useLocalAuth'].lower()
             if useLocalAuth == "true" or useLocalAuth=="t":
                 useLocalAuth = True
+                logger.debug("useLocalAuth enabled")
             else:
                 useLocalAuth = False
         
@@ -894,7 +895,7 @@ class SplunkVersionControlRestore:
 
         self.session_key = config['session_key']
 
-        if self.destPassword.find("password:") == 0:
+        if not useLocalAuth and self.destPassword.find("password:") == 0:
             self.destPassword = get_password(self.destPassword[9:], self.session_key, logger)
 
         knownAppList = []
@@ -902,12 +903,12 @@ class SplunkVersionControlRestore:
         self.gitRootDir = config['gitTempDir']
 
         if 'git_command' in config:
-            self.git_command = config['git_command']
+            self.git_command = config['git_command'].strip()
             logger.debug("Overriding git command to %s" % (self.git_command))
         else:
             self.git_command = "git"
         if 'ssh_command' in config:
-            self.ssh_command = config['ssh_command']
+            self.ssh_command = config['ssh_command'].strip()
             logger.debug("Overriding ssh command to %s" % (self.ssh_command))
         else:
             self.ssh_command = "ssh"
@@ -971,6 +972,7 @@ class SplunkVersionControlRestore:
         else:
             resList = restlist_override
         
+        result = False
         if len(resList) == 0:
             logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
@@ -994,11 +996,12 @@ class SplunkVersionControlRestore:
                     logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitRootDir))
             else:
                 logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitRootDir))
+
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
-            logger.debug("i=\"%s\" The restore list is %s" % (self.stanzaName, resList))
 
+            logger.debug("i=\"%s\" The restore list is %s" % (self.stanzaName, resList))
             #Attempt to determine all users involved in this restore so we can run a single query and determine if they are admins or not
             userList = []
             for aRes in resList:
@@ -1174,3 +1177,5 @@ class SplunkVersionControlRestore:
             shutil.rmtree(self.gitTempDir)
         
         logger.info("i=\"%s\" Done" % (self.stanzaName))
+
+        return result

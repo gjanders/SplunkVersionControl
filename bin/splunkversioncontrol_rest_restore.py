@@ -8,12 +8,15 @@ from logging.config import dictConfig
 import os
 import time
 import calendar
-from splunkversioncontrol_restore_class import SplunkVersionControlRestore
 import sys
+import splunk.rest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib import six
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "bin"))
+from splunkversioncontrol_restore_class import SplunkVersionControlRestore
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -230,8 +233,8 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 self.response.write("Restore has completed successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
                 logger.info("Restore has completed successfully in app=%s, object of type=%s, with name=%s was restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
             else:
-                self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
-                logger.warn("Restore has failed to successfully in app=%s, object of type=%s, with name=%s was restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s" % (app, type, obj_name, tag, scope, restoreAsUser, username))    
+                self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s was not restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
+                logger.warn("Restore has failed to complete successfully in app=%s, object of type=%s, with name=%s was not restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s" % (app, type, obj_name, tag, scope, restoreAsUser, username))    
             
             self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run')
     

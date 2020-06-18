@@ -260,6 +260,11 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.1
+Corrected useLocalAuth setting so that it works as expected
+
+Corrected imports so that post version control method works as well as the cloud version
+
 ### 1.1.0
 Now tested on Windows and Splunk Cloud (note this version of the app is not installed on SplunkCloud, the VersionControl for SplunkCloud is the app to install on the SplunkCloud instance, this variation of the app includes only what is required to remotely backup/restore a SplunkCloud instance
 

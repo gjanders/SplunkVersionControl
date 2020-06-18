@@ -976,6 +976,7 @@ class SplunkVersionControlBackup:
             useLocalAuth = config['useLocalAuth'].lower()
             if useLocalAuth == "true" or useLocalAuth=="t":
                 useLocalAuth = True
+                logger.debug("useLocalAuth enabled")
             else:
                 useLocalAuth = False
         
@@ -994,12 +995,12 @@ class SplunkVersionControlBackup:
         self.gitRepoURL = config['gitRepoURL']
 
         if 'git_command' in config:
-            self.git_command = config['git_command']
+            self.git_command = config['git_command'].strip()
             logger.debug("Overriding git command to %s" % (self.git_command))
         else:
             self.git_command = "git"
         if 'ssh_command' in config:
-            self.ssh_command = config['ssh_command']
+            self.ssh_command = config['ssh_command'].strip()
             logger.debug("Overriding ssh command to %s" % (self.ssh_command))
         else:
             self.ssh_command = "ssh"
@@ -1032,7 +1033,7 @@ class SplunkVersionControlBackup:
         currentEpochTime = calendar.timegm(time.gmtime())
         self.session_key = config['session_key']
         
-        if self.srcPassword.find("password:") == 0:
+        if not useLocalAuth and self.srcPassword.find("password:") == 0:
             self.srcPassword = get_password(self.srcPassword[9:], self.session_key, logger)
 
         if 'appsList' in config and config['appsList']!="":
