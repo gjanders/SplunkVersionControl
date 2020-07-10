@@ -369,9 +369,9 @@ class SplunkVersionControlBackup:
                         logger.info("i=\"%s\" Recording name=\"%s\" info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     
                     logger.debug("Updated time is updated=%s" % (updated))
-                    epochUpdatedTime = long((self.determineTime(updated) - datetime(1970,1,1)).total_seconds())
+                    epochUpdatedTime = int((self.determineTime(updated) - datetime(1970,1,1)).total_seconds())
                     logger.debug("epochUpdatedTime=%s" % (epochUpdatedTime))
-                    if self.lastRunEpoch == None or long(self.lastRunEpoch) <= epochUpdatedTime:
+                    if self.lastRunEpoch == None or int(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, info["name"], type, app, info["owner"], updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, info["name"], type, app, info["owner"], updated, epochUpdatedTime, self.lastRunEpoch))
                     creationSuccess.append(info["name"])
@@ -398,7 +398,7 @@ class SplunkVersionControlBackup:
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
             with open(appLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(infoList["app"], f, sort_keys=True)))
+                f.write(six.text_type(json.dumps(infoList["app"], sort_keys=True)))
         if "user" in infoList:
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
@@ -530,8 +530,8 @@ class SplunkVersionControlBackup:
                     del macroInfo["updated"]
 
                     logger.debug("Updated time is updated=%s" % (updated))
-                    epochUpdatedTime = long((self.determineTime(updated) - datetime(1970,1,1)).total_seconds())
-                    if self.lastRunEpoch == None or long(self.lastRunEpoch) <= epochUpdatedTime:
+                    epochUpdatedTime = int((self.determineTime(updated) - datetime(1970,1,1)).total_seconds())
+                    if self.lastRunEpoch == None or int(self.lastRunEpoch) <= epochUpdatedTime:
                         logger.info("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, macroInfo["name"], app, owner, updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=macro in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, macroInfo["name"], app, owner, updated, epochUpdatedTime, self.lastRunEpoch))
                     logger.info("i=\"%s\" Recording macro info for name=\"%s\" in app=%s with owner=%s sharing=%s" % (self.stanzaName, macroInfo["name"], app, macroInfo["owner"], macroInfo["sharing"]))

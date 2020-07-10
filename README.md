@@ -260,6 +260,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.2
+Found a bug that stops this running on Splunk 8 / python 3
+
 ### 1.1.1
 Corrected useLocalAuth setting so that it works as expected
 
