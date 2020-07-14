@@ -260,6 +260,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.4
+Created inputs.conf to pass app inspect and force python 3 by default
+
 ### 1.1.3
 password: syntax did not work if using a dynamic/REST based restore, now supported
 

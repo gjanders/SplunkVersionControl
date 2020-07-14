@@ -1,6 +1,3 @@
-[default]
-python.version = python3
-
 [splunkversioncontrol_backup://<name>]
 srcURL = <value>
 * This the URL to be used for the REST API access of the Splunk instance, https://localhost:8089/ for example (does not have to be localhost)
