@@ -260,6 +260,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.3
+password: syntax did not work if using a dynamic/REST based restore, now supported
+
 ### 1.1.2
 Found a bug that stops this running on Splunk 8 / python 3
 

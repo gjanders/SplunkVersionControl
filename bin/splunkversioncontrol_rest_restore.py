@@ -17,6 +17,7 @@ from splunklib import six
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "bin"))
 from splunkversioncontrol_restore_class import SplunkVersionControlRestore
+from splunkversioncontrol_utility import get_password
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -123,6 +124,8 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 return
             destUsername = json_dict['destUsername']
             destPassword = json_dict['destPassword']
+            if destPassword.find("password:") == 0:
+                destPassword = get_password(destPassword[9:], self.request['systemAuth'], logger)
         else:
             if not 'destURL' in json_dict:
                 logger.error("Missing one of destURL from the splunk version control restore stanza, invalid configuration")

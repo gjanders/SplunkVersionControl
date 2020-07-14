@@ -39,7 +39,13 @@ def runOSProcess(command, logger, timeout=10, shell=False):
 def get_password(password, session_key, logger):
     #TODO move this into shared function to obtain passwords:
     context = os.path.dirname(os.path.dirname(__file__))
-    
+
+    if context.find("/bin/") != -1 or context.find("\\bin\\") != -1:
+        if context.find("/bin/") != -1:
+            context = context[:context.find("/bin/")]
+        else:
+            context = context[:context.find("\\bin\\")]
+
     if platform.system() == "Windows":
         start = context.rfind("\\")
     else:
@@ -52,6 +58,9 @@ def get_password(password, session_key, logger):
     res = requests.get(url, headers=headers, verify=False)
     dict = json.loads(res.text)
     clear_password = False
+    if not 'entry' in dict:
+        logger.warn("dict=%s did not contain the entries expected on url=%s while looking for password=%s" % (dict, url, password))
+        raise Exception('Error while finding password')
     for entry in dict['entry']:
         logger.debug("found=%s looking for :%s:" % (entry['name'], password))
         if entry['name'].find(":" + password + ":") != -1:
@@ -66,6 +75,9 @@ def get_password(password, session_key, logger):
     logger.debug("Trying url=%s with session_key to obtain name=%s" % (url, password))
     res = requests.get(url, headers=headers, verify=False)
     dict = json.loads(res.text)
+    if not 'entry' in dict:
+        logger.warn("dict=%s did not contain the entries expected on url=%s while looking for password=%s" % (dict, url, password))
+        raise Exception('Error while finding password')
     for entry in dict['entry']:
         logger.debug("found=%s looking for :%s:" % (entry['name'], password))
         if entry['name'].find(":" + password + ":") != -1:
