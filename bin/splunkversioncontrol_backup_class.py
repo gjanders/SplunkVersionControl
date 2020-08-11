@@ -1051,7 +1051,7 @@ class SplunkVersionControlBackup:
         self.gitRootDir = config['gitTempDir']
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
-            if os.listdir(self.gitTempDir)[0] != ".git":
+            if not ".git" in os.listdir(self.gitTempDir):
                 #include the subdirectory which is the git repo
                 self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
                 logger.debug("gitTempDir=%s" % (self.gitTempDir))
@@ -1070,7 +1070,7 @@ class SplunkVersionControlBackup:
                 sys.exit(1)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
-                if os.listdir(self.gitTempDir)[0] != ".git":
+                if not ".git" in os.listdir(self.gitTempDir):
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
                     logger.debug("gitTempDir=%s" % (self.gitTempDir))
