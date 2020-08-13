@@ -260,6 +260,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.5
+Minor update so that the gitTempDir refers to the correct directory and not a sub-directory
+
 ### 1.1.4
 Created inputs.conf to pass app inspect and force python 3 by default
 
