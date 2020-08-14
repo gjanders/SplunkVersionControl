@@ -121,8 +121,9 @@ Or the internal index which also has these log files with the sourcetype splunkv
 - When you create the Splunk Version Control Restore (via Settings -> Data Inputs -> Splunk Version Control Restore), if you are using the newer `splunkversioncontrol_restore_dynamic` dashboard then you do not need to set a run interval, if you are using the older method you want to run this on an interval to check if the lookup file has been updated and if a restore is required...
 
 ### Search head cluster (on prem)
-- Install the SplunkVersionControl application on the SHC via the deployer as normal but do not configure the modular inputs on the search head cluster
-- Run the modular inputs on a standalone instance using the above instructions, and set the srcURL and destURL to a search head cluster member (or a load balanced REST port of the SHC)
+- Install the SplunkVersionControl application on the SHC via the deployer as normal 
+- Either run the modular inputs on a standalone instance using the above instructions, and set the srcURL and destURL to a search head cluster member (or a load balanced REST port of the SHC)
+- Or alternatively configure the backup modular input (including the interval), but do not configure the restore modular input to run on an interval (just configure it to allow restores)
 
 ### Splunk Cloud
 - Install this application as per the standalone instance documentation above onto a non-SplunkCloud instance, install the VersionControl For SplunkCloud on the SplunkCloud instance
@@ -260,6 +261,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.6
+Allow the backup process to run on search head clusters for those that wish to do this...
+
 ### 1.1.5
 Minor update so that the gitTempDir refers to the correct directory and not a sub-directory
 

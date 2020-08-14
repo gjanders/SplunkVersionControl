@@ -1033,6 +1033,24 @@ class SplunkVersionControlBackup:
         currentEpochTime = calendar.timegm(time.gmtime())
         self.session_key = config['session_key']
         
+        headers={'Authorization': 'Splunk %s' % config['session_key']}
+
+        #Verify=false is hardcoded to workaround local SSL issues
+        url = 'https://localhost:8089/services/shcluster/captain/info?output_mode=json'
+        res = requests.get(url, headers=headers, verify=False)
+        if (res.status_code == 503):
+            logger.debug("i=\"%s\" Non-shcluster / standalone instance, safe to run on this node" % (self.stanzaName))
+        elif (res.status_code != requests.codes.ok):
+            logger.error("i=\"%s\" unable to determine if this is a search head cluster or not, this is a bug, URL=%s statuscode=%s reason=%s, response=\"%s\". Continuing run" % (self.stanzaName, url, res.status_code, res.reason, res.text))
+        elif (res.status_code == 200):
+            #We're in a search head cluster, but are we the captain?
+            json_dict = json.loads(res.text)
+            if json_dict['origin'] != "https://localhost:8089/services/shcluster/captain/info":
+                logger.info("i=\"%s\", we are not on the captain, exiting now" % (self.stanzaName))
+                return
+            else:
+                logger.info("i=\"%s\" we are on the captain node, running" % (self.stanzaName))
+
         if not useLocalAuth and self.srcPassword.find("password:") == 0:
             self.srcPassword = get_password(self.srcPassword[9:], self.session_key, logger)
 
