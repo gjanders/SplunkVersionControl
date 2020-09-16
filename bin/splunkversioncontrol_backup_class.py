@@ -1074,8 +1074,8 @@ class SplunkVersionControlBackup:
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
                     logger.debug("gitTempDir=%s" % (self.gitTempDir))
-                    (output, stderrout, res) = runOSProcess("cd %s; git config user.name \"Your Name\"; git config user.email \"youremail@yourdomain.com\"" % (self.gitTempDir), logger, timeout=60)
-                    logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))
+                (output, stderrout, res) = runOSProcess("cd %s; git config user.name \"Your Name\"; git config user.email \"youremail@yourdomain.com\"" % (self.gitTempDir), logger, timeout=60)
+                logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1284,10 +1284,10 @@ class SplunkVersionControlBackup:
             shutil.rmtree(self.gitTempDir)
             if self.windows:
                 (output, stderrout, res) = runOSProcess("cd /d %s & %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
-                (output, stderrout, res) = runOSProcess("cd %s; git config user.name \"Your Name\"; git config user.email \"youremail@yourdomain.com\"" % (self.gitTempDir), logger, timeout=60)
-                logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))
             else:
                 (output, stderrout, res) = runOSProcess("cd %s; %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd %s; git config user.name \"Your Name\"; git config user.email \"youremail@yourdomain.com\"" % (self.gitTempDir), logger, timeout=60)
+                logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))              
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
