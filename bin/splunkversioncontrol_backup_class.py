@@ -1330,8 +1330,9 @@ class SplunkVersionControlBackup:
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
-            #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
-            res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist" % (todaysDate))
+            else:
+                #Append to our tag list so the dashboard shows the new tag as a choice to "restore from"
+                res = self.runSearchJob("| makeresults | eval tag=\"%s\" | fields - _time | outputlookup append=t splunkversioncontrol_taglist" % (todaysDate))
 
         if not gitFailure:
             #Output the time we did the run so we know where to continue from at next runtime
