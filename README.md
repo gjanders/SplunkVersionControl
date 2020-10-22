@@ -261,6 +261,11 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.7
+Increase timeout for commands to a default of 60 seconds
+Ensure a valid message is sent back to the user if a dynamic restore fails
+If git checkout times out, cancel the restore attempt
+
 ### 1.1.6
 Allow the backup process to run on search head clusters for those that wish to do this...
 

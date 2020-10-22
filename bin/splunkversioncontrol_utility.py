@@ -6,7 +6,7 @@ import requests
 import os
 
 #Based on https://stackoverflow.com/questions/1191374/using-module-subprocess-with-timeout
-def runOSProcess(command, logger, timeout=10, shell=False):
+def runOSProcess(command, logger, timeout=60, shell=False):
     logger.debug("Begin OS process run of %s" % (command))
     # if this is Linux use the shell
     if platform.system() != "Windows":
