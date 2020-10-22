@@ -1033,6 +1033,24 @@ class SplunkVersionControlBackup:
         currentEpochTime = calendar.timegm(time.gmtime())
         self.session_key = config['session_key']
         
+        headers={'Authorization': 'Splunk %s' % config['session_key']}
+
+        #Verify=false is hardcoded to workaround local SSL issues
+        url = 'https://localhost:8089/services/shcluster/captain/info?output_mode=json'
+        res = requests.get(url, headers=headers, verify=False)
+        if (res.status_code == 503):
+            logger.debug("i=\"%s\" Non-shcluster / standalone instance, safe to run on this node" % (self.stanzaName))
+        elif (res.status_code != requests.codes.ok):
+            logger.error("i=\"%s\" unable to determine if this is a search head cluster or not, this is a bug, URL=%s statuscode=%s reason=%s, response=\"%s\". Continuing run" % (self.stanzaName, url, res.status_code, res.reason, res.text))
+        elif (res.status_code == 200):
+            #We're in a search head cluster, but are we the captain?
+            json_dict = json.loads(res.text)
+            if json_dict['origin'] != "https://localhost:8089/services/shcluster/captain/info":
+                logger.info("i=\"%s\", we are not on the captain, exiting now" % (self.stanzaName))
+                return
+            else:
+                logger.info("i=\"%s\" we are on the captain node, running" % (self.stanzaName))
+
         if not useLocalAuth and self.srcPassword.find("password:") == 0:
             self.srcPassword = get_password(self.srcPassword[9:], self.session_key, logger)
 
@@ -1064,7 +1082,8 @@ class SplunkVersionControlBackup:
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
-            (output, stderrout, res) = runOSProcess("%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir), logger, timeout=300)
+            (output, stderrout, res) = runOSProcess("cd %s; git config user.name \"Your Name\"; git config user.email \"youremail@yourdomain.com\"" % (self.gitTempDir), logger, timeout=60)
+            logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1074,8 +1093,6 @@ class SplunkVersionControlBackup:
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
                     logger.debug("gitTempDir=%s" % (self.gitTempDir))
-                (output, stderrout, res) = runOSProcess("cd %s; git config user.name \"Your Name\"; git config user.email \"youremail@yourdomain.com\"" % (self.gitTempDir), logger, timeout=60)
-                logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1285,9 +1302,8 @@ class SplunkVersionControlBackup:
             if self.windows:
                 (output, stderrout, res) = runOSProcess("cd /d %s & %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
             else:
-                (output, stderrout, res) = runOSProcess("cd %s; %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
                 (output, stderrout, res) = runOSProcess("cd %s; git config user.name \"Your Name\"; git config user.email \"youremail@yourdomain.com\"" % (self.gitTempDir), logger, timeout=60)
-                logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))              
+                logger.debug("i=\"%s\" results of cd %s and git config user.name/git config user.email is: %s, stderr of %s" % (self.stanzaName, self.gitTempDir, output, stderrout))
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
