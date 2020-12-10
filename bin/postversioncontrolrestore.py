@@ -60,6 +60,7 @@ class SVCPostRestore(GeneratingCommand):
     restoreAsUser = Option(require=True)
     scope = Option(require=True)
     timeout = Option(require=True)
+    sslVerify = Option(require=False, default=False)
     
     def generate(self):
         """
@@ -94,7 +95,7 @@ class SVCPostRestore(GeneratingCommand):
         
         logger.debug("Using token %s" % (body['Authorization']))
         
-        attempt = requests.post(url, verify=False, data=body)
+        attempt = requests.post(url, verify=self.sslVerify, data=body)
         if attempt.status_code != 200:
             logger.error("POST request failed with status_code=%s, reason=%s, text=%s on url=%s" % (attempt.status_code, attempt.reason, attempt.text, url))
             yield {'result': 'Unknown failure, received a non-200 response code of %s on the url %s, reason %s, text result is %s' % (attempt.status_code, url, attempt.reason, attempt.text)}

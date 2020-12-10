@@ -49,6 +49,13 @@ SCHEME = """<scheme>
                 <title>gitRepoURL</title>
                 <description>git repository URL to store the objects (SSH URL only)</description>
             </arg>
+            <arg name="sslVerify">
+                <title>sslVerify</title>
+                <description>Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)</description>
+                <validation>is_bool('sslVerify')</validation>
+                <required_on_create>false</required_on_create>
+            </arg>
+ 
             <arg name="auditLogsLookupBackTime">
                 <title>auditLogsLookupBackTime</title>
                 <description>This is how far back the audit logs will be checked to ensure that a restore entry is valid, this should be set to your interval time or slightly more, defaults to -1h (use Splunk format)</description>
@@ -176,12 +183,15 @@ def validate_arguments():
             print_error("Unable to convert timeout field to a valid value, this must be an integer value in seconds, value provided was %s" % (val_data['timewait']))
             sys.exit(1)
 
+    sslVerify = False
+    if 'sslVerify' in val_data:
+        sslVerify = val_data['sslVerify']
+
     session_key = val_data['session_key']
 
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:
         url = val_data['destURL'] + "/servicesNS/nobody/%s/search/jobs/export?search=makeresults" % (appName)
-        #Verify=false is hardcoded to workaround local SSL issues
         destUsername = val_data['destUsername']
         destPassword = val_data['destPassword']
 
@@ -199,7 +209,7 @@ def validate_arguments():
 
         try:
             logger.debug("Running query against URL %s with username %s proxies_length=%s" % (url, destUsername, len(proxies)))
-            res = requests.get(url, auth=(destUsername, destPassword), verify=False, proxies=proxies)
+            res = requests.get(url, auth=(destUsername, destPassword), verify=sslVerify, proxies=proxies)
             logger.debug("End query against URL %s with username %s" % (url, destUsername))
             if (res.status_code != requests.codes.ok):
                 print_error("Attempt to validate access to Splunk failed with code %s, reason %s, text %s on URL %s" % (res.status_code, res.reason, res.text, url))

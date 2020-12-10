@@ -77,6 +77,7 @@ class SplunkVersionControlBackup:
     gitRepoURL = None
     stanzaName = None
     lastRunEpoch = None
+    sslVerify = False
 
     # read XML configuration passed from splunkd
     def get_config(self):
@@ -136,8 +137,7 @@ class SplunkVersionControlBackup:
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
         
-        #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
+        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.fatal("i=\"%s\" Could not obtain a list of all apps, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
             sys.exit(-1)
@@ -190,8 +190,7 @@ class SplunkVersionControlBackup:
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
         
-        #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
+        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
         
@@ -433,8 +432,7 @@ class SplunkVersionControlBackup:
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
         
-        #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
+        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" Type macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
         
@@ -749,7 +747,7 @@ class SplunkVersionControlBackup:
             headers = {'Authorization': 'Splunk %s' % self.session_key }
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=data, proxies=self.proxies)
+        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=data, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
@@ -1022,6 +1020,9 @@ class SplunkVersionControlBackup:
 
         self.proxies = proxies
 
+        if 'sslVerify' in config:
+            self.sslVerify = config['sslVerify']
+
         #From server
         self.splunk_rest = config['srcURL']
         excludedList = [ "srcPassword", "session_key" ]
@@ -1035,9 +1036,8 @@ class SplunkVersionControlBackup:
         
         headers={'Authorization': 'Splunk %s' % config['session_key']}
 
-        #Verify=false is hardcoded to workaround local SSL issues
         url = 'https://localhost:8089/services/shcluster/captain/info?output_mode=json'
-        res = requests.get(url, headers=headers, verify=False)
+        res = requests.get(url, headers=headers, verify=self.sslVerify)
         if (res.status_code == 503):
             logger.debug("i=\"%s\" Non-shcluster / standalone instance, safe to run on this node" % (self.stanzaName))
         elif (res.status_code != requests.codes.ok):
