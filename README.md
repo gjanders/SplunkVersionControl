@@ -63,6 +63,7 @@ The following assumptions are made:
 - git is accessible on the command line, this has been tested on Linux & Windows with git for Windows installed 
 - git is using an SSH-based URL and the remote git repository allows the machine running the SplunkVersionControl application to remotely access the repository without a username/password prompt (i.e. SSH keys are in use)
 - git will work from the user running the Splunk process over SSH, note that on Windows this will be the system account by default, on Linux the splunk user
+- the git repository is dedicated to this particular backup as the root / top level of the git repo will be used to create backups
 
 ## Do the modular input backup and restore tasks need to be on the same Splunk instance?
 No. However, the backup/restore modular input must have access to its own git temporary directory on the OS filesystem, the temporary directory should be unique for both backup and restore operations
@@ -117,6 +118,7 @@ Or the internal index which also has these log files with the sourcetype splunkv
 - If you are running the newer `splunkversioncontrol_restore_dynamic` dashboard the macros `splunk_vc_name`, `splunk_vc_url`, `splunk_vc_timeout` may need customisation to match your environment. In particular the `splunk_vc_name` assumes you have called your SplunkVersionControlRestore modular input "Prod". See the macros section of this document for more information
 - Ensure the directory where the git repository will be cloned to is empty (i.e. the git clone can create it)
 - Ensure the git repository has at least 1 commit (i.e. it is initialized and a git checkout master will work if you clone the git repo)
+- Ensure the git repository is not shared with anything other than this particular backup, as other items may be overwritten
 - When you create the Splunk Version Control Backup (via Settings -> Data Inputs -> Splunk Version Control Backup), click "More settings" and set the backup interval you would like (tags will only be created if config has changed within Splunk)
 - When you create the Splunk Version Control Restore (via Settings -> Data Inputs -> Splunk Version Control Restore), if you are using the newer `splunkversioncontrol_restore_dynamic` dashboard then you do not need to set a run interval, if you are using the older method you want to run this on an interval to check if the lookup file has been updated and if a restore is required...
 
@@ -131,7 +133,7 @@ Or the internal index which also has these log files with the sourcetype splunkv
 - Configure the remoteAppName within the Splunk Version Control Backup & Splunk Version Control Restore modular inputs to "SplunkVersionControlCloud"
 
 ## How do I initialize a git repository?
-github and other websites may offer to initlize the repository for you, if they do not the steps are usually similar to:
+github and other websites may offer to initialize the repository for you, if they do not the steps are usually similar to:
 - git clone git@<website>:testing.git
 - cd testing
 - touch README.md
@@ -261,6 +263,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.8
+README.md update - git repositories must be dedicated per-backup and not shared with other items as the root level / top level directory is used
+
 ### 1.1.7
 Increase timeout for commands to a default of 60 seconds
 Ensure a valid message is sent back to the user if a dynamic restore fails
