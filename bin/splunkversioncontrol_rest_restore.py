@@ -59,7 +59,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 class SVCRestore(splunk.rest.BaseRestHandler):
 
-    def query_back_for_user_and_permissions(self, authorization_token, remoteAddr,*, sslVerify):
+    def query_back_for_user_and_permissions(self, authorization_token, *, sslVerify):
         headers = { "Authorization" : authorization_token }
 
         #Run a query back against the source system to check the username/role
@@ -104,7 +104,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         url = "https://localhost:8089/servicesNS/-/-/data/inputs/splunkversioncontrol_restore/" + six.moves.urllib.parse.quote(splunk_vc_name) + "?output_mode=json"
         logger.debug("Now running query against url=%s to obtain config information" % (url))
 
-        res = self.runHttpRequest(url, headers, None, "get", "querying the inputs for splunkversioncontrol_restore with name %s" % (splunk_vc_name), sslVerify=sslVerify)
+        res = self.runHttpRequest(url, headers, None, "get", "querying the inputs for splunkversioncontrol_restore with name %s" % (splunk_vc_name), sslVerify=False)
         if not res:
             return
 
@@ -160,7 +160,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         else:
             time_wait = 600
 
-        username, roles = self.query_back_for_user_and_permissions(payload['Authorization'][0], remoteAddr)
+        username, roles = self.query_back_for_user_and_permissions(payload['Authorization'][0], sslVerify=sslVerify)
         logger.info("username=%s roles=%s" % (username, roles))
 
         app = payload['app'][0]

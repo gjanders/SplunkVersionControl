@@ -10,7 +10,27 @@ from logging.config import dictConfig
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration, Option
+from splunklib.searchcommands.validators import Validator, Boolean, File
 from splunklib.binding import HTTPError
+
+class OrValidator(Validator):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+    def __call__(self, value):
+        """Returns b if a raises an exception otherwise a."""
+        try:
+            return self.a.__call__(value)
+        except ValueError:
+            return self.b.__call__(value)
+
+    def format(self, value):
+        """Returns b if a raises an exception otherwise a."""
+        try:
+            return self.a.format(value)
+        except:
+            return self.b.format(value)
+
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -60,7 +80,7 @@ class SVCPostRestore(GeneratingCommand):
     restoreAsUser = Option(require=True)
     scope = Option(require=True)
     timeout = Option(require=True)
-    sslVerify = Option(require=False, default=False)
+    sslVerify = Option(require=False, default=False, validate=OrValidator(File(), Boolean()))
     
     def generate(self):
         """
