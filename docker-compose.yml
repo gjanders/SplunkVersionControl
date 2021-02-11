@@ -28,6 +28,7 @@ services:
       - ./metadata:/opt/splunk/etc/apps/SplunkVersionControl/metadata
       - ./README:/opt/splunk/etc/apps/SplunkVersionControl/README
       - ./static:/opt/splunk/etc/apps/SplunkVersionControl/static
+      - ./test/sh_default.yml:/tmp/defaults/default.yml
 
   splunk_moc:
     networks:
