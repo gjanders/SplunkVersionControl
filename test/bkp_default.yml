@@ -9,7 +9,7 @@ splunk:
           splunkversioncontrol_backup://SH:
             srcURL: https://splunk_sh:8089
             srcUsername: admin
-            srcPassword: password:SH
+            srcPassword: g8nGXBQBF
             gitTempDir: /opt/splunk/vcs/git_tmp_backup
             gitRepoURL: file:///opt/splunk/vcs/backup.git
             # sslVerify: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
@@ -19,7 +19,7 @@ splunk:
           splunkversioncontrol_restore://SH:
             destURL: https://splunk_sh:8089
             destUsername: admin
-            destPassword: password:SH
+            destPassword: g8nGXBQBF
             gitTempDir: /opt/splunk/vcs/git_tmp_restore
             gitRepoURL: file:///opt/splunk/vcs/backup.git
             # sslVerify: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
