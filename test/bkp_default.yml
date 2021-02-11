@@ -1,0 +1,29 @@
+---
+#ansible_post_tasks: file:///tmp/install_git.yml
+splunk:
+  conf:
+    - key: inputs
+      value:
+        directory: /opt/splunk/etc/apps/SplunkVersionControl/local
+        content:
+          splunkversioncontrol_backup://SH:
+            srcURL: https://splunk_sh:8089
+            srcUsername: admin
+            srcPassword: password:SH
+            gitTempDir: /opt/splunk/vcs/git_tmp_backup
+            gitRepoURL: file:///opt/splunk/vcs/backup.git
+            # sslVerify: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
+            debugMode: true
+            useLocalAuth: false
+            interval: 60
+          splunkversioncontrol_restore://SH:
+            destURL: https://splunk_sh:8089
+            destUsername: admin
+            destPassword: password:SH
+            gitTempDir: /opt/splunk/vcs/git_tmp_restore
+            gitRepoURL: file:///opt/splunk/vcs/backup.git
+            # sslVerify: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
+            debugMode: true
+            useLocalAuth: false
+            auditLogsLookupBackTime: -2h
+            timewait: 30

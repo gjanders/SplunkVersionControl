@@ -1,0 +1,15 @@
+---
+#ansible_post_tasks: file:///tmp/install_git.yml
+splunk:
+  conf:
+    - key: macros
+      value:
+        directory: /opt/splunk/etc/apps/SplunkVersionControl/local
+        content:
+          splunk_vc_name:
+            definition: SH
+          splunk_vc_url:
+            definition: https://splunk_moc:8089
+          sslVerify:
+            definiton: false
+            # definition: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
