@@ -242,7 +242,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             payload = json.dumps({ 'start_time': curtime })
             headers['Content-Type'] = 'application/json'
             #update kvstore with runtime
-            res = self.runHttpRequest(url, headers, payload, 'post', 'updating kvstore collection splunkversioncontrol_rest_restore_status', sslVerify=sslVerify)
+            res = self.runHttpRequest(url, headers, payload, 'post', 'updating kvstore collection splunkversioncontrol_rest_restore_status', sslVerify=False)
             if not res:
                 return res
 
@@ -254,7 +254,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s, from tag %s, scope %s with restoreAsUser %s and your username of %s. Message is %s" % (app, type, obj_name, tag, scope, restoreAsUser, username, message))
                 logger.warn("Restore has failed to complete successfully in app=%s, object of type=%s, with name=%s, from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s, message=%s" % (app, type, obj_name, tag, scope, restoreAsUser, username, message))
 
-            self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run', sslVerify=sslVerify)
+            self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run', sslVerify=False)
 
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, url, appname, headers, auth, username, earliest_time, *, sslVerify=False):
