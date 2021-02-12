@@ -10,7 +10,7 @@ from logging.config import dictConfig
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration, Option
-from splunklib.searchcommands.validators import Validator, Boolean, File
+from splunklib.searchcommands.validators import Validator, Boolean
 from splunklib.binding import HTTPError
 
 class OrValidator(Validator):
@@ -31,6 +31,13 @@ class OrValidator(Validator):
         except:
             return self.b.format(value)
 
+class Filename(Validator):
+    # TODO Validate file path
+    def __call__(self, value):
+        return value
+
+    def format(self, value):
+        return value
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -80,7 +87,8 @@ class SVCPostRestore(GeneratingCommand):
     restoreAsUser = Option(require=True)
     scope = Option(require=True)
     timeout = Option(require=True)
-    sslVerify = Option(require=False, default=False, validate=OrValidator(File(), Boolean()))
+    sslVerify = Option(require=False, default=False, validate=OrValidator(Boolean(), Filename()))
+    requestingAddress = Option(require=False, default=False)
     
     def generate(self):
         """
@@ -108,6 +116,7 @@ class SVCPostRestore(GeneratingCommand):
         body['restoreAsUser'] = self.restoreAsUser
         body['scope'] = self.scope
         body['timeout'] = self.timeout
+        body['requestingAddress'] = self.requestingAddress
         
         logger.info("Attempting POST request to url=%s with body=\"%s\"" % (url, body))
         

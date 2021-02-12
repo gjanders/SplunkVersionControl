@@ -59,12 +59,15 @@ logging.getLogger().setLevel(logging.INFO)
 
 class SVCRestore(splunk.rest.BaseRestHandler):
 
-    def query_back_for_user_and_permissions(self, authorization_token, *, sslVerify):
+    def query_back_for_user_and_permissions(self, requestingAddress, authorization_token, *, sslVerify):
         headers = { "Authorization" : authorization_token }
 
         #Run a query back against the source system to check the username/role
-        remoteAddr = self.request['remoteAddr']
-        url = "https://" + remoteAddr + ":8089/services/authentication/current-context?output_mode=json"
+        if requestingAddress:
+            remoteAddr = requestingAddress
+        else:
+            remoteAddr = "https://" + self.request['remoteAddr'] + ":8089"
+        url = remoteAddr + "/services/authentication/current-context?output_mode=json"
         logger.info("Received remote request checking username and role related to the token on url=%s" % (url))
         logger.debug("token=%s" % (authorization_token))
 
@@ -160,7 +163,12 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         else:
             time_wait = 600
 
-        username, roles = self.query_back_for_user_and_permissions(payload['Authorization'][0], sslVerify=sslVerify)
+        if 'requestingAddress' in payload:
+            requestingAddress = payload['requestingAddress'][0]
+        else:
+            requestingAddress = None
+
+        username, roles = self.query_back_for_user_and_permissions(requestingAddress, payload['Authorization'][0], sslVerify=sslVerify)
         logger.info("username=%s roles=%s" % (username, roles))
 
         app = payload['app'][0]
@@ -207,7 +215,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             headers = { "Authorization" : "Splunk " + self.request['systemAuth'] }
             curtime = calendar.timegm(time.gmtime())
             url = "https://localhost:8089/servicesNS/nobody/SplunkVersionControl/storage/collections/data/splunkversioncontrol_rest_restore_status"
-            res = self.runHttpRequest(url, headers, None, "get", "checking kvstore collection splunkversioncontrol_rest_restore_status", sslVerify=sslVerify)
+            res = self.runHttpRequest(url, headers, None, "get", "checking kvstore collection splunkversioncontrol_rest_restore_status", sslVerify=False)
             if not res:
                 return
 
@@ -216,7 +224,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             if not len(res) == 0:
                 if not 'start_time' in res[0]:
                     logger.warn("Warning invalid kvstore data, will wipe it and continue in collection splunkversioncontrol_rest_restore_status on url=%s, value returned res=\"%s\"" % (url, payload))
-                    self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status', sslVerify=sslVerify)
+                    self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status', sslVerify=False)
                 else:
                     kvstore_start_time = res[0]['start_time']
                     target_time = curtime - time_wait
