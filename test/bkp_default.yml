@@ -12,7 +12,7 @@ splunk:
             srcPassword: g8nGXBQBF
             gitTempDir: /opt/splunk/vcs/git_tmp_backup
             gitRepoURL: file:///opt/splunk/vcs/backup.git
-            # sslVerify: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
+            sslVerify: /cert_dir/ca.crt
             debugMode: true
             useLocalAuth: false
             interval: 60
@@ -22,7 +22,7 @@ splunk:
             destPassword: g8nGXBQBF
             gitTempDir: /opt/splunk/vcs/git_tmp_restore
             gitRepoURL: file:///opt/splunk/vcs/backup.git
-            # sslVerify: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
+            sslVerify: /cert_dir/ca.crt
             debugMode: true
             useLocalAuth: false
             auditLogsLookupBackTime: -2h
@@ -33,6 +33,6 @@ splunk:
         content:
           sslConfig:
             enableSplunkdSSL: true
-            serverCert: /cert_dir/splunk_sh.pem
+            serverCert: /cert_dir/splunk_moc.pem
             sslRootCAPath: /cert_dir/ca.crt
             sslPassword: password
