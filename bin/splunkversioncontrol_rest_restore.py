@@ -231,7 +231,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                     if kvstore_start_time < target_time:
                         logger.warn("Found existing entry from %s but time is %s, this is past the limit of current time minus %s (%s)" % (kvstore_start_time, curtime, time_wait, target_time))
                         #More than 10 minutes ago, delete the entry and move on
-                        self.runHttpRequest(url, headers, None, "delete", "wiping kvstore splunkversioncontrol_rest_restore_status due to record %s older than %s time period" % (kvstore_start_time, target_time), sslVerify=sslVerify)
+                        self.runHttpRequest(url, headers, None, "delete", "wiping kvstore splunkversioncontrol_rest_restore_status due to record %s older than %s time period" % (kvstore_start_time, target_time), sslVerify=False)
                     else:
                         removal_target = kvstore_start_time + time_wait + 1
                         logger.warn("Attempted to run but found a running restore instance with time=%s and current_time=%s, will delete and move on after current_time_minus=%s seconds (override_time=%s)" % (kvstore_start_time, curtime, time_wait, removal_target))

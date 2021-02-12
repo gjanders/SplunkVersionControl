@@ -116,7 +116,8 @@ class SVCPostRestore(GeneratingCommand):
         body['restoreAsUser'] = self.restoreAsUser
         body['scope'] = self.scope
         body['timeout'] = self.timeout
-        body['requestingAddress'] = self.requestingAddress
+        if self.requestingAddress:
+            body['requestingAddress'] = self.requestingAddress
         
         logger.info("Attempting POST request to url=%s with body=\"%s\"" % (url, body))
         
