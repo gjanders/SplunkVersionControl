@@ -1,0 +1,82 @@
+version: "3.7"
+networks:
+  splunknet:
+    driver: bridge
+    attachable: true
+
+services:
+  certificates:
+    build: certificates
+    hostname: certificates
+    container_name: certificates
+    volumes:
+      - cert_dir:/cert_dir
+    environment:
+      CERTIFICATE_0: "splunk_moc 127.0.0.1 server_cert"
+      CERTIFICATE_1: "splunk_sh 127.0.0.1 server_cert"
+
+  splunk_sh:
+    networks:
+      splunknet:
+        aliases:
+          - splunk_sh
+    hostname: splunk_sh
+    container_name: splunk_sh
+    image: splunk/splunk:latest
+    ports:
+    - 8003:8000
+    - 8089
+    environment:
+      - SPLUNK_PASSWORD=g8nGXBQBF
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_STANDALONE_URL=splunk_sh
+    volumes:
+      - ../bin:/opt/splunk/etc/apps/SplunkVersionControl/bin
+      - ../default:/opt/splunk/etc/apps/SplunkVersionControl/default
+      - ../lib:/opt/splunk/etc/apps/SplunkVersionControl/lib
+      - ../metadata:/opt/splunk/etc/apps/SplunkVersionControl/metadata
+      - ../README:/opt/splunk/etc/apps/SplunkVersionControl/README
+      - ../static:/opt/splunk/etc/apps/SplunkVersionControl/static
+      - ../lookups/splunkversioncontrol_globalexclusionlist.csv:/opt/splunk/etc/apps/SplunkVersionControl/lookups/splunkversioncontrol_globalexclusionlist.csv
+      - ../test/sh_default.yml:/tmp/defaults/default.yml
+      - cert_dir:/cert_dir
+    depends_on:
+      - certificates
+
+  splunk_moc:
+    networks:
+      splunknet:
+        aliases:
+          - splunk_moc
+    hostname: splunk_moc
+    container_name: splunk_moc
+    image: splunk/splunk:latest
+    entrypoint:
+      - /bin/sh
+      - /usr/sbin/custom_init.sh
+    ports:
+    - 8004:8000
+    - 8089
+    environment:
+      - SPLUNK_PASSWORD=g8nGXBQBF
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_STANDALONE_URL=splunk_sh
+      - SPLUNK_ROLE=splunk_monitor
+      - DEBUG=true
+     
+    volumes:
+      - ../bin:/opt/splunk/etc/apps/SplunkVersionControl/bin
+      - ../default:/opt/splunk/etc/apps/SplunkVersionControl/default
+      - ../lib:/opt/splunk/etc/apps/SplunkVersionControl/lib
+      - ../metadata:/opt/splunk/etc/apps/SplunkVersionControl/metadata
+      - ../README:/opt/splunk/etc/apps/SplunkVersionControl/README
+      - ../static:/opt/splunk/etc/apps/SplunkVersionControl/static
+      - ../lookups/splunkversioncontrol_globalexclusionlist.csv:/opt/splunk/etc/apps/SplunkVersionControl/lookups/splunkversioncontrol_globalexclusionlist.csv
+      - ../test/bkp_default.yml:/tmp/defaults/default.yml
+      - ../test/custom_init.sh:/usr/sbin/custom_init.sh
+      - cert_dir:/cert_dir
+    depends_on:
+      - certificates
+
+volumes:
+  cert_dir: {}

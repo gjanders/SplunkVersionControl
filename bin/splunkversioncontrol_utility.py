@@ -55,7 +55,7 @@ def get_password(password, session_key, logger, *, sslVerify=False):
     url = "https://localhost:8089/servicesNS/-/" + context + "/storage/passwords?output_mode=json&f=clear_password&search=" + password
     logger.debug("Trying url=%s with session_key to obtain name=%s" % (url, password))
     headers = {'Authorization': 'Splunk %s' % session_key}
-    res = requests.get(url, headers=headers, verify=sslVerify)
+    res = requests.get(url, headers=headers, verify=False)
     dict = json.loads(res.text)
     clear_password = False
     if not 'entry' in dict:
@@ -73,7 +73,7 @@ def get_password(password, session_key, logger, *, sslVerify=False):
 
     url = "https://localhost:8089/servicesNS/-/-/storage/passwords?output_mode=json&f=clear_password&count=0&search=" + password
     logger.debug("Trying url=%s with session_key to obtain name=%s" % (url, password))
-    res = requests.get(url, headers=headers, verify=sslVerify)
+    res = requests.get(url, headers=headers, verify=False)
     dict = json.loads(res.text)
     if not 'entry' in dict:
         logger.warn("dict=%s did not contain the entries expected on url=%s while looking for password=%s" % (dict, url, password))

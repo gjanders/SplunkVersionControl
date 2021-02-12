@@ -1037,7 +1037,7 @@ class SplunkVersionControlBackup:
         headers={'Authorization': 'Splunk %s' % config['session_key']}
 
         url = 'https://localhost:8089/services/shcluster/captain/info?output_mode=json'
-        res = requests.get(url, headers=headers, verify=self.sslVerify)
+        res = requests.get(url, headers=headers, verify=False)
         if (res.status_code == 503):
             logger.debug("i=\"%s\" Non-shcluster / standalone instance, safe to run on this node" % (self.stanzaName))
         elif (res.status_code != requests.codes.ok):
