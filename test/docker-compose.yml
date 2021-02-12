@@ -5,6 +5,16 @@ networks:
     attachable: true
 
 services:
+  certificates:
+    build: certificates
+    hostname: certificates
+    container_name: certificates
+    volumes:
+      - cert_dir:/cert_dir
+    environment:
+      CERTIFICATE_0: "splunk_moc 127.0.0.1 server_cert"
+      CERTIFICATE_1: "splunk_sh 127.0.0.1 server_cert"
+
   splunk_sh:
     networks:
       splunknet:
@@ -27,7 +37,11 @@ services:
       - ../metadata:/opt/splunk/etc/apps/SplunkVersionControl/metadata
       - ../README:/opt/splunk/etc/apps/SplunkVersionControl/README
       - ../static:/opt/splunk/etc/apps/SplunkVersionControl/static
+      - ../lookups/splunkversioncontrol_globalexclusionlist.csv:/opt/splunk/etc/apps/SplunkVersionControl/lookups/splunkversioncontrol_globalexclusionlist.csv
       - ../test/sh_default.yml:/tmp/defaults/default.yml
+      - cert_dir:/cert_dir
+    depends_on:
+      - certificates
 
   splunk_moc:
     networks:
@@ -57,5 +71,12 @@ services:
       - ../metadata:/opt/splunk/etc/apps/SplunkVersionControl/metadata
       - ../README:/opt/splunk/etc/apps/SplunkVersionControl/README
       - ../static:/opt/splunk/etc/apps/SplunkVersionControl/static
+      - ../lookups/splunkversioncontrol_globalexclusionlist.csv:/opt/splunk/etc/apps/SplunkVersionControl/lookups/splunkversioncontrol_globalexclusionlist.csv
       - ../test/bkp_default.yml:/tmp/defaults/default.yml
       - ../test/custom_init.sh:/usr/sbin/custom_init.sh
+      - cert_dir:/cert_dir
+    depends_on:
+      - certificates
+
+volumes:
+  cert_dir: {}

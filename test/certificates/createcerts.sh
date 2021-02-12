@@ -60,6 +60,7 @@ mkdir -p $dir/certs
 [ ! -f $dir/index.txt ] && touch $dir/index.txt
 # SIGN Request
 openssl ca \
+  -batch \
   -in ${CSR} \
   -out ${CERT} \
   -extensions ${CRT_TYPE} \

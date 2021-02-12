@@ -27,3 +27,12 @@ splunk:
             useLocalAuth: false
             auditLogsLookupBackTime: -2h
             timewait: 30
+    - key: server
+      value:
+        directory: /opt/splunk/etc/system/local/
+        content:
+          sslConfig:
+            enableSplunkdSSL: true
+            serverCert: /cert_dir/splunk_sh.pem
+            sslRootCAPath: /cert_dir/ca.crt
+            sslPassword: password

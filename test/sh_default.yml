@@ -12,3 +12,12 @@ splunk:
           sslVerify:
             definiton: false
             # definition: /opt/splunk/etc/apps/SplunkVersionControl/auth/ca.pem
+    - key: server
+      value:
+        directory: /opt/splunk/etc/system/local/
+        content:
+          sslConfig:
+            enableSplunkdSSL: true
+            serverCert: /cert_dir/splunk_sh.pem
+            sslRootCAPath: /cert_dir/ca.crt
+            sslPassword: password
