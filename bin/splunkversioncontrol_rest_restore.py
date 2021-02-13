@@ -59,7 +59,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 class SVCRestore(splunk.rest.BaseRestHandler):
 
-    def query_back_for_user_and_permissions(self, requestingAddress, authorization_token, *, sslVerify):
+    def query_back_for_user_and_permissions(self, requestingAddress, authorization_token, sslVerify):
         headers = { "Authorization" : authorization_token }
 
         #Run a query back against the source system to check the username/role
@@ -257,7 +257,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run', sslVerify=False)
 
     #Run a Splunk query via the search/jobs endpoint
-    def runSearchJob(self, url, appname, headers, auth, username, earliest_time, *, sslVerify=False):
+    def runSearchJob(self, url, appname, headers, auth, username, earliest_time, sslVerify=False):
         url = url + "/servicesNS/-/%s/search/jobs" % (appname)
         query = "savedsearch \"Splunk Version Control Audit Query POST\" username=\"%s\" | stats count | where count>0" % (username)
         logger.debug("Running requests.post() on url=%s query=\"%s\"" % (url, query))
@@ -279,7 +279,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 logger.warn("messages from query=\"%s\" were messages=\"%s\"" % (query, res["messages"]))
         return res
 
-    def runHttpRequest(self, url, headers, data, type, text, *, sslVerify=False):
+    def runHttpRequest(self, url, headers, data, type, text, sslVerify=False):
         if type == "delete":
             res = requests.delete(url, headers=headers, verify=sslVerify)
         elif type == "post":
