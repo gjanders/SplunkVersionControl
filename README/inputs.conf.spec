@@ -9,6 +9,8 @@ gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
 * git repository URL to store the objects (SSH URL only)
+sslVerify = <boolean>
+* Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
 noPrivate = <boolean>
 * disable the backup of user level / private objects (true/false), default false
 noDisabled = <boolean>
@@ -47,6 +49,9 @@ gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
 * git repository URL to store the objects (SSH URL only)
+sslVerify = <boolean>
+* Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
+
 auditLogsLookupBackTime = <value>
 * This is how far back the audit logs will be checked to ensure that a restore entry is valid, this should be set to your interval time or slightly more, defaults to -1h (use Splunk format)
 debugMode = <boolean>

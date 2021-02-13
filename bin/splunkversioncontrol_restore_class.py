@@ -69,6 +69,7 @@ class SplunkVersionControlRestore:
     appName = "SplunkVersionControl"
     gitRepoURL = None
     stanzaName = None
+    sslVerify = False
 
     # read XML configuration passed from splunkd
     def get_config(self):
@@ -161,7 +162,7 @@ class SplunkVersionControlRestore:
         res_result = False
 
         #Verify=false is hardcoded to workaround local SSL issues        
-        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)	
+        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)	
         objExists = False
 
         #If we get 404 it definitely does not exist or it has a name override
@@ -348,7 +349,7 @@ class SplunkVersionControlRestore:
             objExistsURL = "%s/%s?output_mode=json" % (url, origName)
             logger.debug("i=\"%s\" URL=%s re-checking object exists URL due to name override from %s to original name of %s proxies_length=%s" % (self.stanzaName, objExistsURL, name, origName, len(self.proxies)))
             #Verify=false is hardcoded to workaround local SSL issues
-            res = requests.get(objExistsURL, auth=auth, headers=headers, verify=False, proxies=self.proxies)
+            res = requests.get(objExistsURL, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
 
             #If we get 404 it definitely does not exist or it has a name override
             if (res.status_code == 404):
@@ -399,14 +400,14 @@ class SplunkVersionControlRestore:
             del payload['disabled']
 
         logger.debug("i=\"%s\" Attempting to %s type=%s with name=%s on URL=%s with payload=\"%s\" in app=%s proxies_length=%s" % (self.stanzaName, createOrUpdate, type, name, url, payload, app, len(self.proxies)))
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
+        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
         if (res.status_code != requests.codes.ok and res.status_code != 201):
             logger.error("i=\"%s\" user=%s, name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, user, name, type, url, res.status_code, res.reason, res.text, app, owner))
             #Saved Searches sometimes fail due to the VSID field, auto-retry in case that solves the problem...
             if type=="savedsearches":
                 if 'vsid' in payload:
                     del payload['vsid']
-                    res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
+                    res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
                     if (res.status_code != requests.codes.ok and res.status_code != 201):
                         logger.error("i=\"%s\" user=%s, re-attempted without vsid but result for name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanzaName, user, name, type, url, res.status_code, res.reason, res.text, app, owner))
                         result = False
@@ -442,7 +443,7 @@ class SplunkVersionControlRestore:
             url = "%s/acl" % (objURL)
             payload = { "owner": owner, "sharing" : sharing }
             logger.info("i=\"%s\" Attempting to change ownership of type=%s with name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanzaName, type, name, url, owner, app, sharing))
-            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
+            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
 
             #If re-own fails log this for investigation
             if (res.status_code != requests.codes.ok):
@@ -502,7 +503,7 @@ class SplunkVersionControlRestore:
             #servicesNS/-/search/properties/macros
             #__stanza = <name>
 
-            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
+            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
             if (res.status_code != requests.codes.ok and res.status_code != 201):
                 message = "name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (name, app, url, res.status_code, res.reason, res.text, owner)
                 logger.error("i=\"" + self.stanzaName + "\"" + message)
@@ -529,7 +530,7 @@ class SplunkVersionControlRestore:
         payload = config
 
         logger.debug("i=\"%s\" Attempting to modify type=macro name=%s on URL=%s with payload=\"%s\" in app=%s proxies_length=%s" % (self.stanzaName, name, url, payload, app, len(self.proxies)))
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
+        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
         if (res.status_code != requests.codes.ok and res.status_code != 201):
             logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text))
             result = False
@@ -538,7 +539,7 @@ class SplunkVersionControlRestore:
             url = "%s/servicesNS/%s/%s/configs/conf-macros/%s/acl" % (self.splunk_rest, owner, app, name)
             payload = { "owner": owner, "sharing" : sharing }
             logger.info("i=\"%s\" Attempting to change ownership of type=macro name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanzaName, name, url, owner, app, sharing))
-            res = requests.post(url, auth=auth, headers=headers, verify=False, data=payload, proxies=self.proxies)
+            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
             if (res.status_code != requests.codes.ok):
                 logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s sharing=%s" % (self.stanzaName, name, app, url, res.status_code, res.reason, res.text, owner, sharing))
             else:
@@ -581,7 +582,7 @@ class SplunkVersionControlRestore:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
 
         #Verify=false is hardcoded to workaround local SSL issues
-        res = requests.get(url, auth=auth, headers=headers, verify=False, proxies=self.proxies)
+        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         objExists = False
         if (res.status_code == 404):
             logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanzaName, url))
@@ -843,7 +844,7 @@ class SplunkVersionControlRestore:
         else:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
 
-        res = requests.post(url, auth=auth, headers=headers, verify=False, data=data, proxies=self.proxies)
+        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=data, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
@@ -948,6 +949,9 @@ class SplunkVersionControlRestore:
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         self.proxies = proxies
+
+        if 'sslVerify' in config:
+            self.sslVerify = config['sslVerify']
 
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:

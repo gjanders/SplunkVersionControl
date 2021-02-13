@@ -1,0 +1,26 @@
+---
+splunk:
+  conf:
+    - key: macros
+      value:
+        directory: /opt/splunk/etc/apps/SplunkVersionControl/local
+        content:
+          splunk_vc_name:
+            definition: SH
+          splunk_vc_url:
+            definition: https://splunk_moc:8089/services/splunkversioncontrol_rest_restore
+          sslVerify:
+#            definiton: false
+            definition: /cert_dir/ca.crt
+          requestingAddress:
+            # is used to connect back
+            definition: https://splunk_sh:8089
+    - key: server
+      value:
+        directory: /opt/splunk/etc/system/local/
+        content:
+          sslConfig:
+            enableSplunkdSSL: true
+            serverCert: /cert_dir/splunk_sh.pem
+            sslRootCAPath: /cert_dir/ca.crt
+            sslPassword: password

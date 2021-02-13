@@ -36,7 +36,7 @@ def runOSProcess(command, logger, timeout=60, shell=False):
     return str(stdout), str(stderr), res
 
 # use the password endpoint to obtain the clear_password passed in, start with the context of this app and then try all contexts
-def get_password(password, session_key, logger):
+def get_password(password, session_key, logger, sslVerify=False):
     #TODO move this into shared function to obtain passwords:
     context = os.path.dirname(os.path.dirname(__file__))
 

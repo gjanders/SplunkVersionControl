@@ -10,7 +10,34 @@ from logging.config import dictConfig
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration, Option
+from splunklib.searchcommands.validators import Validator, Boolean
 from splunklib.binding import HTTPError
+
+class OrValidator(Validator):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+    def __call__(self, value):
+        """Returns b if a raises an exception otherwise a."""
+        try:
+            return self.a.__call__(value)
+        except ValueError:
+            return self.b.__call__(value)
+
+    def format(self, value):
+        """Returns b if a raises an exception otherwise a."""
+        try:
+            return self.a.format(value)
+        except:
+            return self.b.format(value)
+
+class Filename(Validator):
+    # TODO Validate file path
+    def __call__(self, value):
+        return value
+
+    def format(self, value):
+        return value
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -60,6 +87,8 @@ class SVCPostRestore(GeneratingCommand):
     restoreAsUser = Option(require=True)
     scope = Option(require=True)
     timeout = Option(require=True)
+    sslVerify = Option(require=False, default=False, validate=OrValidator(Boolean(), Filename()))
+    requestingAddress = Option(require=False, default=False)
     
     def generate(self):
         """
@@ -87,6 +116,8 @@ class SVCPostRestore(GeneratingCommand):
         body['restoreAsUser'] = self.restoreAsUser
         body['scope'] = self.scope
         body['timeout'] = self.timeout
+        if self.requestingAddress:
+            body['requestingAddress'] = self.requestingAddress
         
         logger.info("Attempting POST request to url=%s with body=\"%s\"" % (url, body))
         
@@ -94,7 +125,7 @@ class SVCPostRestore(GeneratingCommand):
         
         logger.debug("Using token %s" % (body['Authorization']))
         
-        attempt = requests.post(url, verify=False, data=body)
+        attempt = requests.post(url, verify=self.sslVerify, data=body)
         if attempt.status_code != 200:
             logger.error("POST request failed with status_code=%s, reason=%s, text=%s on url=%s" % (attempt.status_code, attempt.reason, attempt.text, url))
             yield {'result': 'Unknown failure, received a non-200 response code of %s on the url %s, reason %s, text result is %s' % (attempt.status_code, url, attempt.reason, attempt.text)}
