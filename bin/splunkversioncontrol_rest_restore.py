@@ -163,7 +163,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         else:
             time_wait = 600
 
-        if 'requestingAddress' in payload:
+        if 'requestingAddress' in payload and payload['requestingAddress'][0].lower() != 'false':
             requestingAddress = payload['requestingAddress'][0]
         else:
             requestingAddress = None

@@ -265,6 +265,11 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 ## Release Notes 
 ### 1.1.8
 README.md update - git repositories must be dedicated per-backup and not shared with other items as the root level / top level directory is used
+Merged pull request from calesanz https://github.com/gjanders/SplunkVersionControl/pull/16 to allow a new sslVerify option to pass in the CA certificate file, or to leave SSL validation disabled 
+In addition this pull request adds a requestingAddress which optionally controls the call-back ip when using the postversioncontrolrestore command
+Finally this pull requests adds scripts and a testing suite using docker into the github version, for SplunkBase the test directory is removed (you can access it on https://github.com/gjanders/SplunkVersionControl)
+
+Updated Splunk python SDK to 1.6.15
 
 ### 1.1.7
 Increase timeout for commands to a default of 60 seconds
