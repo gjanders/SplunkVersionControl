@@ -263,6 +263,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.9
+Corrected error in splunkversioncontrol_backup.py 
+
 ### 1.1.8
 README.md update - git repositories must be dedicated per-backup and not shared with other items as the root level / top level directory is used
 Merged pull request from calesanz https://github.com/gjanders/SplunkVersionControl/pull/16 to allow a new sslVerify option to pass in the CA certificate file, or to leave SSL validation disabled 
