@@ -233,7 +233,7 @@ def validate_arguments():
 
         try:
             logger.debug("Running query against URL %s with username %s proxies_length=%s" % (url, srcUsername, len(proxies)))
-            res = requests.get(url, auth=(srcUsername, srcPassword), verify=self.sslVerify, proxies=proxies)
+            res = requests.get(url, auth=(srcUsername, srcPassword), verify=sslVerify, proxies=proxies)
             logger.debug("End query against URL %s with username %s" % (url, srcUsername))
 
             if (res.status_code != requests.codes.ok):
