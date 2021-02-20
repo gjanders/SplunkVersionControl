@@ -122,6 +122,16 @@ SCHEME = """<scheme>
                 <description>If supplied provides a proxy setting to use to access the srcURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="git_name">
+                <title>git_name</title>
+                <description>If set this runs git config user.name with the value provided once the backup git repo is cloned</description>
+                <required_on_create>false</required_on_create>
+            </arg>
+            <arg name="git_email">
+                <title>git_email</title>
+                <description>If set this runs git config user.email with the value provided once the backup git repo is cloned</description>
+                <required_on_create>false</required_on_create>
+            </arg>
         </args>
     </endpoint>
 </scheme>

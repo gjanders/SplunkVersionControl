@@ -1083,6 +1083,21 @@ class SplunkVersionControlBackup:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
             (output, stderrout, res) = runOSProcess("%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir), logger, timeout=300)
+
+            if self.windows:
+                clone_str = "cd /d {0} & {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
+                if 'git_name' in config:
+                    clone_str = clone_str + " & {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+                if 'git_email' in config:
+                    clone_str = clone_str + " & {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
+            else:
+                clone_str = "cd {0}; {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
+                if 'git_name' in config:
+                    clone_str = clone_str + " ; {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+                if 'git_email' in config:
+                    clone_str = clone_str + " ; {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
+            (output, stderrout, res) = runOSProcess(clone_str, logger, timeout=300, shell=True)
+
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1298,10 +1313,20 @@ class SplunkVersionControlBackup:
         if res == False:
             logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, output, stderrout))
             shutil.rmtree(self.gitTempDir)
+
             if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d %s & %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
+                clone_str = "cd /d {0} & {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
+                if 'git_name' in config:
+                    clone_str = clone_str + " & {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+                if 'git_email' in config:
+                    clone_str = clone_str + " & {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
             else:
-                (output, stderrout, res) = runOSProcess("cd %s; %s clone %s" % (self.gitRootDir, self.git_command, self.gitRepoURL), logger, timeout=300, shell=True)
+                clone_str = "cd {0}; {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
+                if 'git_name' in config:
+                    clone_str = clone_str + " ; {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+                if 'git_email' in config:
+                    clone_str = clone_str + " ; {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
+            (output, stderrout, res) = runOSProcess(clone_str, logger, timeout=300, shell=True)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)

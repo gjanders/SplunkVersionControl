@@ -163,7 +163,8 @@ There are also many online resources to help with learning git
 - git_command - optional, the location of the git command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk
 - ssh_command - optional, the location of the ssh command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk
 - proxy - optional, if supplied provides a proxy setting to use to access the srcURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry "passwordinpasswordsconf". If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
-
+- git_name - optional, if provided runs git config user.name to override the name used on this particular repository for git commits
+- git_email - optional, if provided runs git config user.email to override the email used on this particular repository for git commits
 "More settings"
 - interval - how often the backup should run, if not set the backup will only run on restart of the Splunk instance or when you save this configuration...
 
@@ -195,6 +196,8 @@ The following macros exist and are relate to the `splunkversioncontrol_restore_d
 - `splunk_vc_name` - this macro is the name of the `splunkversioncontrol_restore` modular input name on the remote (or local) system where the restore occurs
 - `splunk_vc_url` - this macro is the URL endpoint of the remote system, defaults to `https://localhost:8089/services/splunkversioncontrol_rest_restore`, you will need to change this if you have a remote instance performing the backup/restore operations, for example if you are on a search head cluster 
 - `splunk_vc_timeout` - this is the time delay between triggering the remote command and waiting for the `_audit` index to catchup with a log entry to advise the command was run, if set too short the restore may fail because the `| postversioncontrolrestore` search has not appeared in the `_audit` index yet
+- `sslVerify` - defaults to "False", this can be set to the location of a CA file to be used by the python requests library to validate the SSL certificates in use
+- `requestingAddress` - by default the REST endpoint splunkversioncontrol_rest_restore will make a HTTPS call back to the calling IP address, this overrides the address to call back, the default of False results in a call back to the reuqesting IP address which is used in most use cases 
 
 ## Troubleshooting
 In some Linux OS distributions an error similar to `OPENSSL_1.0.0 not found` may appear, `os.unsetenv('LD_LIBRARY_PATH')` appears to fix this however AppInspect does not allow modification of OS environment variables.
@@ -263,8 +266,16 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.10
+Added new parameters into the `splunkversioncontrol_backup` modular input for:
+`git_name`
+`git_email`
+
+By default the git global settings will be used, but if specified these will run a git config user.name/git config user.email after cloning the repo
+README.md updates
+
 ### 1.1.9
-Corrected error in splunkversioncontrol_backup.py 
+Corrected error in `splunkversioncontrol_backup.py`
 
 ### 1.1.8
 README.md update - git repositories must be dedicated per-backup and not shared with other items as the root level / top level directory is used
