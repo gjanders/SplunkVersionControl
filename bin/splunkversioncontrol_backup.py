@@ -49,8 +49,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="sslVerify">
                 <title>sslVerify</title>
-                <description>Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)</description>
-                <validation>is_bool('sslVerify')</validation>
+                <description>Set to 'true' or 'false' to enable/disable SSL verification for REST requests to srcUrl. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)</description>
                 <required_on_create>false</required_on_create>
             </arg>
             <arg name="noPrivate">
@@ -221,7 +220,15 @@ def validate_arguments():
 
     sslVerify = False
     if 'sslVerify' in val_data:
-        sslVerify = val_data['sslVerify']
+        if val_data['sslVerify'].lower() == 'true':
+            sslVerify = True
+            logger.debug('sslverify set to boolean True from: ' + val_data['sslVerify'])
+        elif val_data['sslVerify'].lower() == 'false':
+            sslVerify = False
+            logger.debug('sslverify set to boolean False from: ' + val_data['sslVerify'])
+        else:
+            sslVerify = val_data['sslVerify']
+            logger.debug('sslverify set to: ' + val_data['sslVerify'])
 
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:
@@ -242,7 +249,7 @@ def validate_arguments():
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         try:
-            logger.debug("Running query against URL %s with username %s proxies_length=%s" % (url, srcUsername, len(proxies)))
+            logger.debug("Running query against URL %s with username %s proxies_length=%s sslVerify=%s" % (url, srcUsername, len(proxies), sslVerify))
             res = requests.get(url, auth=(srcUsername, srcPassword), verify=sslVerify, proxies=proxies)
             logger.debug("End query against URL %s with username %s" % (url, srcUsername))
 

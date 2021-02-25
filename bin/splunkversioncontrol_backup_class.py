@@ -127,7 +127,7 @@ class SplunkVersionControlBackup:
         appList = []
         url = self.splunk_rest + "/services/apps/local?search=disabled%3D0&count=0&f=title"
 
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s proxies_length=%s to obtain a list of all applications" % (self.stanzaName, url, self.srcUsername, len(self.proxies)))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s, proxies_length=%s, sslVerify=%s to obtain a list of all applications" % (self.stanzaName, url, self.srcUsername, len(self.proxies), self.sslVerify))
         #no srcUsername, use the session_key method    
         headers = {}
         auth = None
@@ -180,7 +180,7 @@ class SplunkVersionControlBackup:
         #Keep a success list to be returned by this function
         #Use count=-1 to ensure we see all the objects
         url = self.splunk_rest + "/servicesNS/-/" + app + endpoint + "?count=-1"
-        logger.debug("i=\"%s\" Running requests.get() on %s user=%s in app=%s proxies_length=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies)))
+        logger.debug("i=\"%s\" Running requests.get() on %s user=%s in app=%s, proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies), self.sslVerify))
 
         headers = {}
         auth = None
@@ -423,7 +423,7 @@ class SplunkVersionControlBackup:
         #servicesNS/-/-/properties/macros doesn't show private macros so using /configs/conf-macros to find all the macros
         #again with count=-1 to find all the available macros
         url = self.splunk_rest + "/servicesNS/-/" + app + "/configs/conf-macros?count=-1"
-        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type macro proxies_length=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies)))
+        logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type macro proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies), self.sslVerify))
         
         headers = {}
         auth = None
@@ -737,7 +737,7 @@ class SplunkVersionControlBackup:
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, query):
         url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
-        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\" proxies_length=%s" % (self.stanzaName, url, self.srcUsername, query, len(self.proxies)))
+        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\", proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, query, len(self.proxies), self.sslVerify))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot" }
         
         #no srcUsername, use the session_key method    
@@ -1022,6 +1022,15 @@ class SplunkVersionControlBackup:
 
         if 'sslVerify' in config:
             self.sslVerify = config['sslVerify']
+            if config['sslVerify'].lower() == 'true':
+                self.sslVerify = True
+                logger.debug('sslverify set to boolean True from: ' + config['sslVerify'])
+            elif config['sslVerify'].lower() == 'false':
+                self.sslVerify = False
+                logger.debug('sslverify set to boolean False from: ' + config['sslVerify'])
+            else:
+                self.sslVerify = config['sslVerify']
+                logger.debug('sslverify set to: ' + config['sslVerify'])
 
         #From server
         self.splunk_rest = config['srcURL']

@@ -266,6 +266,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.11
+Fixed sslVerify option to work as expected
+
 ### 1.1.10
 Added new parameters into the `splunkversioncontrol_backup` modular input for:
 - `git_name`
