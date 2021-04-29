@@ -1021,7 +1021,6 @@ class SplunkVersionControlBackup:
         self.proxies = proxies
 
         if 'sslVerify' in config:
-            self.sslVerify = config['sslVerify']
             if config['sslVerify'].lower() == 'true':
                 self.sslVerify = True
                 logger.debug('sslverify set to boolean True from: ' + config['sslVerify'])
