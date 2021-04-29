@@ -951,7 +951,15 @@ class SplunkVersionControlRestore:
         self.proxies = proxies
 
         if 'sslVerify' in config:
-            self.sslVerify = config['sslVerify']
+            if config['sslVerify'].lower() == 'true':
+                self.sslVerify = True
+                logger.debug('sslverify set to boolean True from: ' + config['sslVerify'])
+            elif config['sslVerify'].lower() == 'false':
+                self.sslVerify = False
+                logger.debug('sslverify set to boolean False from: ' + config['sslVerify'])
+            else:
+                self.sslVerify = config['sslVerify']
+                logger.debug('sslverify set to: ' + config['sslVerify'])
 
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
