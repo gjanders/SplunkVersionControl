@@ -52,7 +52,6 @@ SCHEME = """<scheme>
             <arg name="sslVerify">
                 <title>sslVerify</title>
                 <description>Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)</description>
-                <validation>is_bool('sslVerify')</validation>
                 <required_on_create>false</required_on_create>
             </arg>
  
