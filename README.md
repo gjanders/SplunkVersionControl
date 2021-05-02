@@ -266,6 +266,9 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.12
+Merged pull request from bre77 to make sslVerify option on restore equivalent to the backup version
+
 ### 1.1.11
 Fixed sslVerify option to work as expected
 

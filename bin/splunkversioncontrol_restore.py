@@ -215,7 +215,7 @@ def validate_arguments():
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         try:
-            logger.debug("Running query against URL %s with username %s proxies_length=%s" % (url, destUsername, len(proxies), sslVerify))
+            logger.debug("Running query against URL %s with username %s proxies_length=%s sslVerify=%s" % (url, destUsername, len(proxies), sslVerify))
             res = requests.get(url, auth=(destUsername, destPassword), verify=sslVerify, proxies=proxies)
             logger.debug("End query against URL %s with username %s" % (url, destUsername))
             if (res.status_code != requests.codes.ok):
