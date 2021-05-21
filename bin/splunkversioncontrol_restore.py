@@ -97,6 +97,11 @@ SCHEME = """<scheme>
                 <description>If supplied provides a proxy setting to use to access the destURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="git_branch">
+                <title>git_branch</title>
+                <description>Sets the git branch to use, defaults to master</description>
+                <required_on_create>false</required_on_create>
+            </arg>
         </args>
     </endpoint>
 </scheme>

@@ -266,6 +266,11 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.13
+Updated saved search `Splunk Version Control Audit Query POST` with new regex
+
+Added the git_branch parameter to allow any branch to be used for backup/restore
+
 ### 1.1.12
 Merged pull request from bre77 to make sslVerify option on restore equivalent to the backup version
 

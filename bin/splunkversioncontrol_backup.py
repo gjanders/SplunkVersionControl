@@ -131,6 +131,11 @@ SCHEME = """<scheme>
                 <description>If set this runs git config user.email with the value provided once the backup git repo is cloned</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="git_branch">
+                <title>git_branch</title>
+                <description>Sets the git branch to use, defaults to master</description>
+                <required_on_create>false</required_on_create>
+            </arg>
         </args>
     </endpoint>
 </scheme>

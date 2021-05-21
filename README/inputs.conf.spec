@@ -41,6 +41,8 @@ git_name = <value>
 * If set this runs git config user.name '<value>' once the backup git repo is cloned
 git_email = <value>
 * If set this runs git config user.email '<value>' once the backup git repo is cloned
+git_branch = <value>
+* Sets the git branch to use, defaults to master
 
 [splunkversioncontrol_restore://<name>]
 destURL = <value>
@@ -72,3 +74,5 @@ ssh_command = <value>
 * defaults to 'ssh', can be overriden (for example on a Windows server) to use a full path to the ssh command
 proxy = <value>
 * If supplied provides a proxy setting to use to access the destURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
+git_branch = <value>
+* Sets the git branch to use, defaults to master

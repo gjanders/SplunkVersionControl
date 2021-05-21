@@ -997,6 +997,7 @@ class SplunkVersionControlBackup:
             logger.debug("Overriding git command to %s" % (self.git_command))
         else:
             self.git_command = "git"
+
         if 'ssh_command' in config:
             self.ssh_command = config['ssh_command'].strip()
             logger.debug("Overriding ssh command to %s" % (self.ssh_command))
@@ -1007,6 +1008,12 @@ class SplunkVersionControlBackup:
             self.windows = True
         else:
             self.windows = False
+
+        if 'git_branch' in config:
+            self.git_branch = config['git_branch'].strip()
+            logger.debug("Overriding git branch to %s" % (self.git_branch))
+        else:
+            self.git_branch = "master"
 
         proxies = {}
         if 'proxy' in config:
@@ -1174,18 +1181,18 @@ class SplunkVersionControlBackup:
         else:
             logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
         
-        #Always start from master and the current version (just in case changes occurred)
+        #Always start from the git branch and the current version (just in case changes occurred)
         if self.windows:
-            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
         else:
-            (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+            (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
         if res == False:
-            logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s'. Wiping git directory" % (self.stanzaName, output, stderrout))
+            logger.warn("i=\"%s\" git checkout %s or git pull failed, stdout is '%s' stderrout is '%s'. Wiping git directory" % (self.stanzaName, self.git_branch, output, stderrout))
             shutil.rmtree(self.gitTempDir)
             if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
             else:
-                (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1313,13 +1320,13 @@ class SplunkVersionControlBackup:
             self.perApp(app, macrosRun, tagsRun, eventtypesRun, calcFieldsRun, fieldAliasRun, fieldTransformsRun, fieldExtractionRun, collectionsRun, lookupDefinitionRun, automaticLookupRun, timesRun, viewstatesRun, panelsRun, datamodelsRun, dashboardsRun, savedsearchesRun, workflowActionsRun, sourcetypeRenamingRun, navMenuRun)
             logger.info("i=\"%s\" Completed working with app=%s" % (self.stanzaName, app))
 
-        #Always start from master and the current version (just in case someone was messing around in the temp directory)
+        #Always start from the git branch and the current version (just in case someone was messing around in the temp directory)
         if self.windows:
-            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
         else:
-            (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+            (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
         if res == False:
-            logger.warn("i=\"%s\" git checkout master or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, output, stderrout))
+            logger.warn("i=\"%s\" git checkout %s or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, self.git_branch, output, stderrout))
             shutil.rmtree(self.gitTempDir)
 
             if self.windows:
@@ -1354,9 +1361,9 @@ class SplunkVersionControlBackup:
             #We have one or more files to commit, do something
             todaysDate = datetime.now().strftime("%Y-%m-%d_%H%M")
             if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d {0} & {3} add -A & {3} commit -am \"Updated by Splunk Version Control backup job {1}\" & {3} tag {2} & {3} push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd /d {0} & {3} add -A & {3} commit -am \"Updated by Splunk Version Control backup job {1}\" & {3} tag {2} & {3} push origin %s --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
             else:
-                (output, stderrout, res) = runOSProcess("cd {0}; {3} add -A; {3} commit -am \"Updated by Splunk Version Control backup job {1}\"; {3} tag {2}; {3} push origin master --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd {0}; {3} add -A; {3} commit -am \"Updated by Splunk Version Control backup job {1}\"; {3} tag {2}; {3} push origin %s --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             

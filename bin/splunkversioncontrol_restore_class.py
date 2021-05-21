@@ -925,11 +925,18 @@ class SplunkVersionControlRestore:
             logger.debug("Overriding git command to %s" % (self.git_command))
         else:
             self.git_command = "git"
+
         if 'ssh_command' in config:
             self.ssh_command = config['ssh_command'].strip()
             logger.debug("Overriding ssh command to %s" % (self.ssh_command))
         else:
             self.ssh_command = "ssh"
+
+        if 'git_branch' in config:
+            self.git_branch = config['git_branch'].strip()
+            logger.debug("Overriding git branch to %s" % (self.git_branch))
+        else:
+            self.git_branch = "master"
 
         gitFailure = False
         
@@ -1007,16 +1014,16 @@ class SplunkVersionControlRestore:
         else:
             #Do a git pull to ensure we are up-to-date
             if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
             else:
-                (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
             if res == False:
                 logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 shutil.rmtree(self.gitTempDir)
                 if self.windows:
-                    (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout master & %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+                    (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
                 else:
-                    (output, stderrout, res) = runOSProcess("cd %s; %s checkout master; %s pull" % (self.gitTempDir, self.git_command, self.git_command), logger, timeout=300, shell=True)
+                    (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
                 if res == False:
                     logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                     sys.exit(1)
