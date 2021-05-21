@@ -266,6 +266,8 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.1.14
+
 ### 1.1.13
 Updated saved search `Splunk Version Control Audit Query POST` with new regex
 
