@@ -102,6 +102,11 @@ SCHEME = """<scheme>
                 <description>Sets the git branch to use, defaults to master</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="file_per_ko">
+                <title>file_per_ko</title>
+                <description>Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app)</description>
+                <required_on_create>false</required_on_create>
+            </arg>
         </args>
     </endpoint>
 </scheme>

@@ -15,6 +15,7 @@ from datetime import datetime,timedelta
 import shutil
 from io import open
 import platform
+import hashlib
 from splunkversioncontrol_utility import runOSProcess, get_password
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
@@ -388,25 +389,113 @@ class SplunkVersionControlBackup:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=%s with sharing=global in app=%s into dir=%s" % (self.stanzaName, type, app, globalStorageDir))
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
-            with open(globalStorageDir + "/" + type, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(infoList["global"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                global_type_dir = globalStorageDir + "/" + type
+                files, dirs = self.write_files(global_type_dir, infoList["global"])
+                self.remove_dir_contents(files, dirs, type, "global")
+            else:
+                # in the original method we dumped 1 large file with all objects of this type at this scope
+                with open(globalStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(infoList["global"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "app" in infoList:
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s with sharing=app in app=%s into dir=%s" % (self.stanzaName, type, app, appLevelStorageDir))
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
-            with open(appLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(infoList["app"], sort_keys=True)))
+            if self.file_per_ko:
+                app_type_dir = appLevelStorageDir + "/" + type
+                files, dirs = self.write_files(app_type_dir, infoList["app"])
+                self.remove_dir_contents(files, dirs, type, "app")
+            else:
+            # in the original method we dumped 1 large file with all objects of this type at this scope
+                with open(appLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(infoList["app"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "user" in infoList:
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s sharing=user (private) in app=%s into dir=%s" % (self.stanzaName, type, app, userLevelStorageDir))
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
-            with open(userLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(infoList["user"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                user_type_dir = userLevelStorageDir + "/" + type
+                files, dirs = self.write_files(user_type_dir, infoList["user"])
+                self.remove_dir_contents(files, dirs, type, "user")
+            else:
+                # in the original method we dumped 1 large file with all objects of this type at this scope
+                with open(userLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(infoList["user"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         return creationSuccess
+
+    ###########################
+    #
+    # Shared function to list contents of a directory in terms of directories/files
+    #
+    ###########################
+    def list_dir_contents(self, path):
+        file_list = []
+        dir_list = []
+        for root, directories, files in os.walk(path):
+            for name in files:
+                file_list.append(os.path.join(root, name))
+            for name in directories:
+                dir_list.append(os.path.join(root, name))
+        return file_list, dir_list
+
+    ###########################
+    #
+    # Shared function to remove old files/directories
+    #
+    ###########################
+    def remove_dir_contents(self, files, dirs, type, scope):
+        # At this point we have zero or more files that may have been deleted from splunk but exist on the filesystem
+        logger.info("i=\"%s\" the following files were left after completing the backup at scope=%s for type=%s list=\"%s\"" % (self.stanzaName, scope, type, files))
+        for a_file in files:
+            logger.info("i=\"%s\" removing file=\"%s\"" % (self.stanzaName, a_file))
+            os.remove(a_file)
+            # some files were removed, delete empty directories too
+            if len(files) > 0:
+                for a_dir in dirs:
+                    if len(os.listdir(a_dir)) == 0:
+                        logger.info("i=\"%s\" removing empty dir=\"%s\"" % (self.stanzaName, a_dir))
+
+    ###########################
+    #
+    # Shared function to write each individual file out
+    #
+    ###########################
+    def write_files(self, dir, objects):
+        if not os.path.isdir(dir):
+            os.mkdir(dir)
+        files, dirs = self.list_dir_contents(dir)
+        for an_object in objects:
+            #per-object see if we need to create the directory
+            an_object_dir = dir + "/" + an_object["owner"]
+            if not os.path.isdir(an_object_dir):
+                os.mkdir(an_object_dir)
+            # if a file exceeds 255 characters it will result in a file too long error (e.g. really long field extraction names
+            file_name = six.moves.urllib.parse.quote_plus(an_object["name"])
+            if len(file_name) > 254:
+                hash = hashlib.md5(an_object["name"].encode('utf-8')).hexdigest()
+                file_name = file_name[0:222] + hash
+            an_object_file = an_object_dir + "/" + file_name
+            with open(an_object_file, 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(an_object, sort_keys=True, indent=0)))
+                # add newline so git doesn't think it's different every commit...
+                f.write("\n")
+            try:
+                files.remove(an_object_file)
+            except:
+                pass
+        return files, dirs
 
     ###########################
     #
@@ -548,24 +637,51 @@ class SplunkVersionControlBackup:
             globalStorageDir = appStorageDir + "/global"
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
-            with open(globalStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(macros["global"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                global_macro_dir = globalStorageDir + "/macros"
+                files, dirs = self.write_files(global_macro_dir, macros["global"])
+                self.remove_dir_contents(files, dirs, "macros", "global")
+            else:
+                # in the original method we dumped 1 large file with all macros at this scope
+                with open(globalStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(macros["global"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "app" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=app in app=%s" % (self.stanzaName, app))
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
-            with open(appLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(macros["app"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                app_macro_dir = appLevelStorageDir + "/macros"
+                files, dirs = self.write_files(app_macro_dir, macros["app"])
+                self.remove_dir_contents(files, dirs, "macros", "app")
+            else:
+                # in the original method we dumped 1 large file with all macros at this scope
+                with open(appLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(macros["app"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "user" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=user (private) in app %s" % (self.stanzaName, app))
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
-            with open(userLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(macros["user"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                user_macro_dir = userLevelStorageDir + "/macros"
+                files, dirs = self.write_files(user_macro_dir, macros["user"])
+                self.remove_dir_contents(files, dirs, "macros", "user")
+            else:
+                # in the original method we dumped 1 large file with all macros at this scope
+                with open(userLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(macros["user"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
             
         return macroCreationSuccess
 
@@ -593,7 +709,7 @@ class SplunkVersionControlBackup:
     # 
     ###########################
     def savedsearches(self, app):
-        ignoreList = [ "embed.enabled", "triggered_alert_count" ]
+        ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time" ]
             
         return self.runQueries(app, "/saved/searches", "savedsearches", ignoreList)
 
@@ -1038,6 +1154,16 @@ class SplunkVersionControlBackup:
                 self.sslVerify = config['sslVerify']
                 logger.debug('sslverify set to: ' + config['sslVerify'])
 
+        self.file_per_ko = False
+        if 'file_per_ko' in config:
+            if config['file_per_ko'].lower() == 'true':
+                self.file_per_ko = True
+                logger.debug('file_per_ko set to boolean True from: ' + config['file_per_ko'])
+            elif config['file_per_ko'].lower() == 'false':
+                logger.debug('file_per_ko set to boolean False from: ' + config['file_per_ko'])
+            else:
+                logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"') % (self.stanzaName, config['file_per_ko'])
+
         #From server
         self.splunk_rest = config['srcURL']
         excludedList = [ "srcPassword", "session_key" ]
@@ -1097,8 +1223,6 @@ class SplunkVersionControlBackup:
             if res == False:
                 logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
             
-            (output, stderrout, res) = runOSProcess("%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir), logger, timeout=300)
-
             if self.windows:
                 clone_str = "cd /d {0} & {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
                 if 'git_name' in config:
@@ -1122,6 +1246,7 @@ class SplunkVersionControlBackup:
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
                     logger.debug("gitTempDir=%s" % (self.gitTempDir))
+
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1361,9 +1486,9 @@ class SplunkVersionControlBackup:
             #We have one or more files to commit, do something
             todaysDate = datetime.now().strftime("%Y-%m-%d_%H%M")
             if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d {0} & {3} add -A & {3} commit -am \"Updated by Splunk Version Control backup job {1}\" & {3} tag {2} & {3} push origin %s --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd /d {0} & {3} add -A & {3} commit -am \"Updated by Splunk Version Control backup job {1}\" & {3} tag {2} & {3} push origin {4} --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
             else:
-                (output, stderrout, res) = runOSProcess("cd {0}; {3} add -A; {3} commit -am \"Updated by Splunk Version Control backup job {1}\"; {3} tag {2}; {3} push origin %s --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
+                (output, stderrout, res) = runOSProcess("cd {0}; {3} add -A; {3} commit -am \"Updated by Splunk Version Control backup job {1}\"; {3} tag {2}; {3} push origin {4} --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             
