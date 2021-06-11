@@ -274,6 +274,8 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.2.1
+
 ### 1.2.0
 This version includes a few major changes:
 - `file_per_ko` mode, disabled by default, if enabled outputs 1 file per knowledge object instead of including all knowledge objects of a type within 1 file
