@@ -6,6 +6,7 @@ from logging.config import dictConfig
 import os
 import sys
 import xml.dom.minidom, xml.sax.saxutils
+import platform
 from splunkversioncontrol_restore_class import SplunkVersionControlRestore
 from splunkversioncontrol_utility import runOSProcess, get_password
 
@@ -47,7 +48,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="gitRepoURL">
                 <title>gitRepoURL</title>
-                <description>git repository URL to store the objects (SSH URL only)</description>
+                <description>git repository URL to store the objects</description>
             </arg>
             <arg name="sslVerify">
                 <title>sslVerify</title>
@@ -97,9 +98,19 @@ SCHEME = """<scheme>
                 <description>If supplied provides a proxy setting to use to access the destURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
                 <required_on_create>false</required_on_create>
             </arg>
+            <arg name="git_proxy">
+                <title>git_proxy</title>
+                <description>If supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
+                <required_on_create>false</required_on_create>
+            </arg>
             <arg name="git_branch">
                 <title>git_branch</title>
                 <description>Sets the git branch to use, defaults to master</description>
+                <required_on_create>false</required_on_create>
+            </arg>
+            <arg name="file_per_ko">
+                <title>file_per_ko</title>
+                <description>Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app)</description>
                 <required_on_create>false</required_on_create>
             </arg>
         </args>
@@ -121,6 +132,7 @@ def get_validation_data():
     val_data['session_key'] = session_key
 
     logger.debug("XML: found items")
+
     item_node = root.getElementsByTagName("item")[0]
     if item_node:
         logger.debug("XML: found item")
@@ -243,9 +255,35 @@ def validate_arguments():
     else:
         ssh_command = "ssh"
 
-    (stdout, stderr, res) = runOSProcess("%s ls-remote %s" % (git_command, gitRepoURL), logger)
+    git_proxies = {}
+    if 'git_proxy' in val_data:
+        git_proxies["https"] = val_data['git_proxy']
+        if git_proxies['https'].find("password:") != -1:
+            start = git_proxies['https'].find("password:") + 9
+            end = git_proxies['https'].find("@")
+            logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
+            temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+            git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
+
+    if gitRepoURL.find("http") == 0:
+        gitRepoHTTP = True
+    else:
+        gitRepoHTTP = False
+
+    proxy_command = ""
+
+    if gitRepoHTTP and len(git_proxies) > 0:
+        logger.debug("Adding environment variable HTTPS_PROXY before git commands")
+        proxy_command = "HTTPS_PROXY=" + git_proxies["https"]
+        if platform.system() == "Windows":
+            proxy_command = "set " + proxy_command + " & "
+        else:
+            proxy_command = "export " + proxy_command + " ; "
+
+    (stdout, stderr, res) = runOSProcess("%s %s ls-remote %s" % (proxy_command, git_command, gitRepoURL), logger)
+
     #If we didn't manage to ls-remote perhaps we just need to trust the fingerprint / this is the first run?
-    if res == False:
+    if res == False and not gitRepoHTTP:
         (stdout, stderrout, res) = runOSProcess(ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
         (stdout, stderr, res) = runOSProcess("%s ls-remote %s" % (git_command), logger)
     

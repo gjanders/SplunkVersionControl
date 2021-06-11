@@ -8,7 +8,7 @@ srcPassword = <value>
 gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
-* git repository URL to store the objects (SSH URL only)
+* git repository URL to store the objects
 sslVerify = <boolean>
 * Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
 noPrivate = <boolean>
@@ -43,6 +43,10 @@ git_email = <value>
 * If set this runs git config user.email '<value>' once the backup git repo is cloned
 git_branch = <value>
 * Sets the git branch to use, defaults to master
+git_proxy  = <value>
+* If supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
+file_per_ko = <boolean>
+* Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo
 
 [splunkversioncontrol_restore://<name>]
 destURL = <value>
@@ -54,10 +58,9 @@ destPassword = <value>
 gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
-* git repository URL to store the objects (SSH URL only)
+* git repository URL to restore the objects from
 sslVerify = <boolean>
 * Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
-
 auditLogsLookupBackTime = <value>
 * This is how far back the audit logs will be checked to ensure that a restore entry is valid, this should be set to your interval time or slightly more, defaults to -1h (use Splunk format)
 debugMode = <boolean>
@@ -76,3 +79,7 @@ proxy = <value>
 * If supplied provides a proxy setting to use to access the destURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
 git_branch = <value>
 * Sets the git branch to use, defaults to master
+git_proxy  = <value>
+* If supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
+file_per_ko = <boolean>
+* Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo

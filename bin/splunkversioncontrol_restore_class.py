@@ -15,7 +15,13 @@ import datetime
 import shutil
 from io import open
 import platform
+import hashlib
 from splunkversioncontrol_utility import runOSProcess, get_password
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
+
+from splunklib import six
+
 
 """
  Restore Knowledge Objects
@@ -115,6 +121,30 @@ class SplunkVersionControlRestore:
 
     ###########################
     #
+    # Shared function to list contents of a directory in terms of directories/files
+    #
+    ###########################
+    def list_dir_contents(self, path):
+        file_list = []
+        for root, directories, files in os.walk(path):
+            for name in files:
+                file_list.append(os.path.join(root, name))
+        return file_list
+
+    ###########################
+    #
+    # Shared function to determine filename to restore
+    #
+    ###########################
+    def gen_file_name(self, name):
+        file_name = six.moves.urllib.parse.quote_plus(name)
+        if len(file_name) > 254:
+            hash = hashlib.md5(name.encode('utf-8')).hexdigest()
+            file_name = file_name[0:222] + hash
+        return file_name
+
+    ###########################
+    #
     # runQueries (generic version)
     #   This attempts to read the config data from git (stored in json format), if found it will attempt to restore the config to the
     #   destination server
@@ -161,8 +191,7 @@ class SplunkVersionControlRestore:
         message = ""
         res_result = False
 
-        #Verify=false is hardcoded to workaround local SSL issues        
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)	
+        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         objExists = False
 
         #If we get 404 it definitely does not exist or it has a name override
@@ -186,31 +215,72 @@ class SplunkVersionControlRestore:
         configList = []
 
         foundAtAnyScope = False
+
+        # if a file exceeds 255 characters it will result in a file too long error (e.g. really long field extraction names
+        file_name = self.gen_file_name(name)
+
         #We need to work with user scope
         if userScope == True:
             userDir = self.gitTempDir + "/" + app + "/" + "user"
             #user directory exists
             if os.path.isdir(userDir):
                 typeFile = userDir + "/" + type
-                if os.path.isfile(typeFile):
-                    #The file exists, open it and read the config
-                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
-                    with open(typeFile, 'r') as f:
-                        configList = json.load(f)
+                if self.file_per_ko:
+                    if os.path.isdir(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to search for files to restore in" % (self.stanzaName, user, name, typeFile))
+                        file_list = self.list_dir_contents(typeFile)
+                        file_name_match = []
                         found = False
-                        for configItem in configList:
-                            if configItem['name'] == name or ('origName' in configItem and configItem['origName'] == name):
-                                #We found the configItem we need, run the restoration
-                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
-                                (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
-                                found = True
-                                foundAtAnyScope = True
-                        #Let the logs know we never found it at this scope
-                        if found == False:
-                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=user in file=%s" % (self.stanzaName, user, name, typeFile))
-                #We never found a file that we could use to restore from  at this scope
+                        for a_file in file_list:
+                            file = os.path.basename(a_file)
+                            if file_name == file:
+                                owner = os.path.basename(os.path.dirname(a_file))
+                                if owner == user:
+                                    logger.info("i=\"%s\" user=%s, name=%s, found file=%s to restore from" % (self.stanzaName, user, name, a_file))
+                                    found = True
+                                    foundAtAnyScope = True
+                                    file_exact_match = a_file
+                                    break
+                                else:
+                                    logger.debug("i=\"%s\" owner=%s, user=%s, name=%s, found file=%s with non-matching owner to potentially restore from" % (self.stanzaName, owner, user, name, a_file))
+                                    file_name_match.append(a_file)
+                        if found == True or len(file_name_match) > 0:
+                            foundAtAnyScope = True
+                            #We found the configItem we need, run the restoration
+                            if found:
+                                logger.debug("i=\"%s\" user=%s, name=%s is found in file=%s" % (self.stanzaName, user, name, file_exact_match))
+                                with open(file_exact_match, 'r') as f:
+                                    configItem = json.load(file_exact_match)
+                                    (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                            elif len(file_name_match) > 0:
+                                for a_file in file_name_match:
+                                    logger.debug("i=\"%s\" user=%s, name=%s is potentially found in file=%s" % (self.stanzaName, user, name, a_file))
+                                    with open(a_file, 'r') as f:
+                                        configItem = json.load(f)
+                                        (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                    else:
+                        #There are no user level objects for this app, therefore the restore will not occur at this scope
+                        logger.info("i=\"%s\" user directory of dir=%s does not have a sub-directory of type=%s" % (self.stanzaName, userDir, type))
                 else:
-                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                    if os.path.isfile(typeFile):
+                        #The file exists, open it and read the config
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                        with open(typeFile, 'r') as f:
+                            configList = json.load(f)
+                            found = False
+                            for configItem in configList:
+                                if configItem['name'] == name or ('origName' in configItem and configItem['origName'] == name):
+                                    #We found the configItem we need, run the restoration
+                                    logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
+                                    (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                                    found = True
+                                    foundAtAnyScope = True
+                            #Let the logs know we never found it at this scope
+                            if found == False:
+                                logger.info("i=\"%s\" user=%s, name=%s not found at scope=user in file=%s" % (self.stanzaName, user, name, typeFile))
+                            #We never found a file that we could use to restore from  at this scope
+                            else:
+                                logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no user level objects for this app, therefore the restore will not occur at this scope
                 logger.info("i=\"%s\" user directory of dir=%s does not exist" % (self.stanzaName, userDir))
@@ -221,25 +291,48 @@ class SplunkVersionControlRestore:
             #app directory exists
             if os.path.isdir(appDir):
                 typeFile = appDir + "/" + type
-                if os.path.isfile(typeFile):
-                    #The file we need exists
-                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
-                    with open(typeFile, 'r') as f:
-                        configList = json.load(f)
+                if self.file_per_ko:
+                    if os.path.isdir(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to search for files to restore in" % (self.stanzaName, user, name, typeFile))
+                        file_list = self.list_dir_contents(typeFile)
                         found = False
-                        for configItem in configList:
-                            #We found the required configuration file, now we restore the object
-                            if configItem['name'] == name:
-                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
-                                (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                        for a_file in file_list:
+                            file = os.path.basename(a_file)
+                            if file_name == file:
+                                logger.info("i=\"%s\" user=%s, name=%s, found file=%s to restore from" % (self.stanzaName, user, name, a_file))
                                 found = True
                                 foundAtAnyScope = True
-                        #We never found the object we wanted to restore
-                        if found == False:
-                            logger.info("i=\"%s\" user=%s, name=%s not found at app level scope in typeFile=%s" % (self.stanzaName, user, name, typeFile))
-                #We did not find the file we wanted to restore from
+                                file_exact_match = a_file
+                        if found == True:
+                            #We found the configItem we need, run the restoration
+                            if found:
+                                logger.debug("i=\"%s\" user=%s, name=%s is found in file=%s" % (self.stanzaName, user, name, file_exact_match))
+                                with open(file_exact_match, 'r') as f:
+                                    configItem = json.load(f)
+                                    (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                    else:
+                        #There are no app level objects for this app of this type, therefore the restore will not occur at this scope
+                        logger.info("i=\"%s\" app directory of dir=%s does not have a sub-directory of type=%s" % (self.stanzaName, appDir, type))
                 else:
-                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                    if os.path.isfile(typeFile):
+                        #The file we need exists
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                        with open(typeFile, 'r') as f:
+                            configList = json.load(f)
+                            found = False
+                            for configItem in configList:
+                                #We found the required configuration file, now we restore the object
+                                if configItem['name'] == name:
+                                    logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
+                                    (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                                    found = True
+                                    foundAtAnyScope = True
+                            #We never found the object we wanted to restore
+                            if found == False:
+                                logger.info("i=\"%s\" user=%s, name=%s not found at app level scope in typeFile=%s" % (self.stanzaName, user, name, typeFile))
+                    #We did not find the file we wanted to restore from
+                    else:
+                        logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #The app level scope directory does not exist for this app
                 logger.info("i=\"%s\" app directory of dir=%s does not exist" % (self.stanzaName, appDir))
@@ -249,25 +342,48 @@ class SplunkVersionControlRestore:
             #user directory exists
             if os.path.isdir(globalDir):
                 typeFile = globalDir + "/" + type
-                if os.path.isfile(typeFile):
-                    #We found the file to restore from
-                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
-                    with open(typeFile, 'r') as f:
-                        configList = json.load(f)
+                if self.file_per_ko:
+                    if os.path.isdir(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to search for files to restore in" % (self.stanzaName, user, name, typeFile))
+                        file_list = self.list_dir_contents(typeFile)
                         found = False
-                        for configItem in configList:
-                            #We found the relevant piece of configuration to restore, now run the restore
-                            if configItem['name'] == name:
-                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
-                                (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                        for a_file in file_list:
+                            file = os.path.basename(a_file)
+                            if file_name == file:
+                                logger.info("i=\"%s\" user=%s, name=%s, found file=%s to restore from" % (self.stanzaName, user, name, a_file))
                                 found = True
                                 foundAtAnyScope = True
-                        #We never found the config we wanted to restore
-                        if found == False:
-                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=global in typeFile=%s" % (self.stanzaName, user, name, typeFile))
-                #This type of configuration does not exist at the global level
+                                file_exact_match = a_file
+                        if found == True:
+                            #We found the configItem we need, run the restoration
+                            if found:
+                                logger.debug("i=\"%s\" user=%s, name=%s is found in file=%s" % (self.stanzaName, user, name, file_exact_match))
+                                with open(file_exact_match, 'r') as f:
+                                    configItem = json.load(f)
+                                    (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                    else:
+                        #There are no global level objects for this app of this type, therefore the restore will not occur at this scope
+                        logger.info("i=\"%s\" global directory of dir=%s does not have a sub-directory of type=%s" % (self.stanzaName, globalDir, type))
                 else:
-                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                    if os.path.isfile(typeFile):
+                        #We found the file to restore from
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                        with open(typeFile, 'r') as f:
+                            configList = json.load(f)
+                            found = False
+                            for configItem in configList:
+                                #We found the relevant piece of configuration to restore, now run the restore
+                                if configItem['name'] == name:
+                                    logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
+                                    (res_result, message) = self.runRestore(configItem, type, endpoint, app, name, user, restoreAsUser, adminLevel, objExists)
+                                    found = True
+                                    foundAtAnyScope = True
+                            #We never found the config we wanted to restore
+                            if found == False:
+                                logger.info("i=\"%s\" user=%s, name=%s not found at scope=global in typeFile=%s" % (self.stanzaName, user, name, typeFile))
+                    #This type of configuration does not exist at the global level
+                    else:
+                        logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             #The global directory for this app does not exist
             else:
                 logger.debug("i=\"%s\" global directory of dir=%s does not exist" % (self.stanzaName, globalDir))
@@ -279,7 +395,7 @@ class SplunkVersionControlRestore:
             logger.warn("i=\"%s\" user=%s attempted to restore name=%s, type=%s, restoreAsUser=%s, adminLevel=%s the object was found, but the restore failed" % (self.stanzaName, user, name, type, restoreAsUser, adminLevel))
             return False, message
         else:
-            message = "The object was not found, the restore was unsuccessful. Perhaps check the restore date, scope & capitilisation before trying again?"         
+            message = "The object was not found, the restore was unsuccessful. Perhaps check the restore date, scope & capitilisation before trying again?"
             logger.warn("i=\"%s\" user=%s attempted to restore name=%s, type=%s, restoreAsUser=%s, adminLevel=%s however the object was not found, the restore was unsuccessful. Perhaps check the restore date, scope & capitilisation before trying again?" % (self.stanzaName, user, name, type, restoreAsUser, adminLevel))
             return False, message
 
@@ -603,6 +719,8 @@ class SplunkVersionControlRestore:
 
         configList = []
 
+        file_name = self.gen_file_name(name)
+
         foundAtAnyScope = False
         #This object is at user scope or may be at user scope
         if userScope == True:
@@ -610,25 +728,62 @@ class SplunkVersionControlRestore:
             #user directory exists
             if os.path.isdir(userDir):
                 typeFile = userDir + "/macros"
-                #We found the file, now open it to obtain the contents
-                if os.path.isfile(typeFile):
-                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
-                    with open(typeFile, 'r') as f:
-                        configList = json.load(f)
+                if self.file_per_ko:
+                    if os.path.isdir(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to search for files to restore in" % (self.stanzaName, user, name, typeFile))
+                        file_list = self.list_dir_contents(typeFile)
+                        file_name_match = []
                         found = False
-                        for configItem in configList:
-                            #We found the relevant item, now restore it
-                            if configItem['name'] == name:
-                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary=\"%s\"" % (self.stanzaName, user, name, configItem))
-                                (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
-                                found = True
-                                foundAtAnyScope = True
-                        #We never found the relevant item
-                        if found == False:
-                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=user in typeFile=%s" % (self.stanzaName, user, name, typeFile))
-                #The config file did not exist
+                        for a_file in file_list:
+                            file = os.path.basename(a_file)
+                            if file_name == file:
+                                owner = os.path.basename(os.path.dirname(a_file))
+                                if owner == user:
+                                    logger.info("i=\"%s\" user=%s, name=%s, found file=%s to restore from" % (self.stanzaName, user, name, a_file))
+                                    found = True
+                                    foundAtAnyScope = True
+                                    file_exact_match = a_file
+                                    break
+                                else:
+                                    logger.debug("i=\"%s\" owner=%s, user=%s, name=%s, found file=%s with non-matching owner to potentially restore from" % (self.stanzaName, owner, user, name, a_file))
+                                    file_name_match.append(a_file)
+                        if found == True or len(file_name_match) > 0:
+                            foundAtAnyScope = True
+                            #We found the configItem we need, run the restoration
+                            if found:
+                                logger.debug("i=\"%s\" user=%s, name=%s is found in file=%s" % (self.stanzaName, user, name, file_exact_match))
+                                with open(file_exact_match, 'r') as f:
+                                    configItem = json.load(f)
+                                    (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                            elif len(file_name_match) > 0:
+                                for a_file in file_name_match:
+                                    logger.debug("i=\"%s\" user=%s, name=%s is potentially found in file=%s" % (self.stanzaName, user, name, a_file))
+                                    with open(a_file, 'r') as f:
+                                        configItem = json.load(f)
+                                        (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                    else:
+                        #There are no user level objects for this app, therefore the restore will not occur at this scope
+                        logger.info("i=\"%s\" user directory of dir=%s does not have a sub-directory of type=macro" % (self.stanzaName, userDir))
                 else:
-                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                    #We found the file, now open it to obtain the contents
+                    if os.path.isfile(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                        with open(typeFile, 'r') as f:
+                            configList = json.load(f)
+                            found = False
+                            for configItem in configList:
+                                #We found the relevant item, now restore it
+                                if configItem['name'] == name:
+                                    logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary=\"%s\"" % (self.stanzaName, user, name, configItem))
+                                    (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                                    found = True
+                                    foundAtAnyScope = True
+                            #We never found the relevant item
+                            if found == False:
+                                logger.info("i=\"%s\" user=%s, name=%s not found at scope=user in typeFile=%s" % (self.stanzaName, user, name, typeFile))
+                    #The config file did not exist
+                    else:
+                        logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no user level objects for this app, therefore the restore will not occur at this scope
                 logger.info("i=\"%s\" user directory of dir=%s does not exist" % (self.stanzaName, userDir))
@@ -639,25 +794,49 @@ class SplunkVersionControlRestore:
             #app directory exists
             if os.path.isdir(appDir):
                 typeFile = appDir + "/macros"
-                #We found the file, open it and load the config
-                if os.path.isfile(typeFile):
-                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
-                    with open(typeFile, 'r') as f:
-                        configList = json.load(f)
+
+                if self.file_per_ko:
+                    if os.path.isdir(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to search for files to restore in" % (self.stanzaName, user, name, typeFile))
+                        file_list = self.list_dir_contents(typeFile)
                         found = False
-                        #We found the item, now restore it
-                        for configItem in configList:
-                            if configItem['name'] == name:
-                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
-                                (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                        for a_file in file_list:
+                            file = os.path.basename(a_file)
+                            if file_name == file:
+                                logger.info("i=\"%s\" user=%s, name=%s, found file=%s to restore from" % (self.stanzaName, user, name, a_file))
                                 found = True
                                 foundAtAnyScope = True
-                        #We never found the item
-                        if found == False:
-                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=app in typeFile=%s" % (self.stanzaName, user, name, typeFile))
-                #We never found the file to restore from
+                                file_exact_match = a_file
+                        if found == True:
+                            #We found the configItem we need, run the restoration
+                            if found:
+                                logger.debug("i=\"%s\" user=%s, name=%s is found in file=%s" % (self.stanzaName, user, name, file_exact_match))
+                                with open(file_exact_match, 'r') as f:
+                                    configItem = json.load(f)
+                                    (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                    else:
+                        #There are no app level objects for this app of this type, therefore the restore will not occur at this scope
+                        logger.info("i=\"%s\" app directory of dir=%s does not have a sub-directory of type=macro" % (self.stanzaName, appDir))
                 else:
-                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                    #We found the file, open it and load the config
+                    if os.path.isfile(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                        with open(typeFile, 'r') as f:
+                            configList = json.load(f)
+                            found = False
+                            #We found the item, now restore it
+                            for configItem in configList:
+                                if configItem['name'] == name:
+                                    logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
+                                    (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                                    found = True
+                                    foundAtAnyScope = True
+                            #We never found the item
+                            if found == False:
+                                logger.info("i=\"%s\" user=%s, name=%s not found at scope=app in typeFile=%s" % (self.stanzaName, user, name, typeFile))
+                    #We never found the file to restore from
+                    else:
+                        logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no app level objects for this app, therefore the restore will not occur at this scope
                 logger.info("i=\"%s\" app directory of dir=%s does not exist" % (self.stanzaName, appDir))
@@ -666,25 +845,48 @@ class SplunkVersionControlRestore:
             #global directory exists
             if os.path.isdir(globalDir):
                 typeFile = globalDir + "/macros"
-                #We found the file, attempt to load the config
-                if os.path.isfile(typeFile):
-                    logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
-                    with open(typeFile, 'r') as f:
-                        configList = json.load(f)
+                if self.file_per_ko:
+                    if os.path.isdir(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to search for files to restore in" % (self.stanzaName, user, name, typeFile))
+                        file_list = self.list_dir_contents(typeFile)
                         found = False
-                        for configItem in configList:
-                            #We found the item,  now restore it
-                            if configItem['name'] == name:
-                                logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
-                                (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                        for a_file in file_list:
+                            file = os.path.basename(a_file)
+                            if file_name == file:
+                                logger.info("i=\"%s\" user=%s, name=%s, found file=%s to restore from" % (self.stanzaName, user, name, a_file))
                                 found = True
                                 foundAtAnyScope = True
-                        #We never found the item
-                        if found == False:
-                            logger.info("i=\"%s\" user=%s, name=%s not found at scope=global in typeFile=%s" % (self.stanzaName, user, name, typeFile))
-                #We did not find the file to restore from
+                                file_exact_match = a_file
+                        if found == True:
+                            #We found the configItem we need, run the restoration
+                            if found:
+                                logger.debug("i=\"%s\" user=%s, name=%s is found in file=%s" % (self.stanzaName, user, name, file_exact_match))
+                                with open(file_exact_match, 'r') as f:
+                                    configItem = json.load(f)
+                                    (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                    else:
+                        #There are no app level objects for this app of this type, therefore the restore will not occur at this scope
+                        logger.info("i=\"%s\" app directory of dir=%s does not have a sub-directory of type=macro" % (self.stanzaName, appDir))
                 else:
-                    logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                    #We found the file, attempt to load the config
+                    if os.path.isfile(typeFile):
+                        logger.debug("i=\"%s\" user=%s, name=%s, found typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
+                        with open(typeFile, 'r') as f:
+                            configList = json.load(f)
+                            found = False
+                            for configItem in configList:
+                                #We found the item,  now restore it
+                                if configItem['name'] == name:
+                                    logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanzaName, user, name, configItem))
+                                    (res_result, message) = self.runRestoreMacro(configItem, app, name, user, restoreAsUser, adminLevel, objExists)
+                                    found = True
+                                    foundAtAnyScope = True
+                            #We never found the item
+                            if found == False:
+                                logger.info("i=\"%s\" user=%s, name=%s not found at scope=global in typeFile=%s" % (self.stanzaName, user, name, typeFile))
+                    #We did not find the file to restore from
+                    else:
+                        logger.info("i=\"%s\" user=%s, name=%s, did not find a typeFile=%s to restore from" % (self.stanzaName, user, name, typeFile))
             else:
                 #There are no global level objects for this app, therefore the restore will not occur at this scope
                 logger.info("i=\"%s\" global directory of dir=%s does not exist" % (self.stanzaName, globalDir))
@@ -859,6 +1061,38 @@ class SplunkVersionControlRestore:
                 logger.warn("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
         return res
 
+    def clone_git_dir(self):
+        #Clone the remote git repo
+        clone_str = "%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir)
+        if self.windows:
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                clone_str = "set HTTPS_PROXY=" + self.git_proxies["https"] + " & " + clone_str
+        else:
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                clone_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + clone_str
+
+        (output, stderrout, res) = runOSProcess(clone_str, logger, timeout=300)
+        return (output, stderrout, res)
+
+    def git_pull(self, branch_or_tag, pull=False):
+        #Do a git pull to ensure we are up-to-date
+        if self.windows:
+            pull_str = "cd /d %s & %s checkout %s & " % (self.gitTempDir, self.git_command, branch_or_tag)
+            if pull:
+                pull_str = pull_str + self.git_command + " pull"
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                pull_str = "set HTTPS_PROXY=" + self.git_proxies["https"] + " & " + pull_str
+            (output, stderrout, res) = runOSProcess(pull_str, logger, timeout=300, shell=True)
+        else:
+            pull_str = "cd %s; %s checkout %s" % (self.gitTempDir, self.git_command, branch_or_tag)
+            if pull:
+                pull_str = pull_str + self.git_command + " pull"
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                pull_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + pull_str
+            (output, stderrout, res) = runOSProcess(pull_str, logger, timeout=300, shell=True)
+
+        return (output, stderrout, res)
+
     ###########################
     #
     # Main logic section
@@ -904,6 +1138,12 @@ class SplunkVersionControlRestore:
             auditLogsLookupBackTime = config['auditLogsLookupBackTime']
 
         self.gitRepoURL = config['gitRepoURL']
+
+        # a flag for a http/https vs SSH based git repo
+        if self.gitRepoURL.find("http") == 0:
+            self.gitRepoHTTP = True
+        else:
+            self.gitRepoHTTP = False
 
         #From server
         self.splunk_rest = config['destURL']
@@ -957,6 +1197,18 @@ class SplunkVersionControlRestore:
 
         self.proxies = proxies
 
+        git_proxies = {}
+        if 'git_proxy' in config:
+            git_proxies['https'] = config['git_proxy']
+            if git_proxies['https'].find("password:") != -1:
+                start = git_proxies['https'].find("password:") + 9
+                end = git_proxies['https'].find("@")
+                logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
+                temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+                git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
+
+        self.git_proxies = git_proxies
+
         if 'sslVerify' in config:
             if config['sslVerify'].lower() == 'true':
                 self.sslVerify = True
@@ -968,6 +1220,16 @@ class SplunkVersionControlRestore:
                 self.sslVerify = config['sslVerify']
                 logger.debug('sslverify set to: ' + config['sslVerify'])
 
+        self.file_per_ko = False
+        if 'file_per_ko' in config:
+            if config['file_per_ko'].lower() == 'true':
+                self.file_per_ko = True
+                logger.debug('file_per_ko set to boolean True from: ' + config['file_per_ko'])
+            elif config['file_per_ko'].lower() == 'false':
+                logger.debug('file_per_ko set to boolean False from: ' + config['file_per_ko'])
+            else:
+                logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"') % (self.stanzaName, config['file_per_ko'])
+
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
             if not ".git" in os.listdir(self.gitTempDir):
@@ -978,13 +1240,15 @@ class SplunkVersionControlRestore:
             if not dirExists:
                 #make the directory and clone under here
                 os.mkdir(self.gitTempDir)
-            #Initially we must trust our remote repo URL
-            (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
-            if res == False:
-                logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
-            
+
+            if not self.gitRepoHTTP:
+                #Initially we must trust our remote repo URL
+                (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
+                if res == False:
+                    logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
+
             #Clone the remote git repo
-            (output, stderrout, res) = runOSProcess("%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir), logger, timeout=300)
+            (output, stderrout, res) = self.clone_git_dir()
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1013,17 +1277,12 @@ class SplunkVersionControlRestore:
             logger.info("i=\"%s\" No restore required at this point in time" % (self.stanzaName))
         else:
             #Do a git pull to ensure we are up-to-date
-            if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
-            else:
-                (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
+            (output, stderrout, res) = self.git_pull(self.git_branch, pull=True)
             if res == False:
-                logger.fatal("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                logger.warn("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 shutil.rmtree(self.gitTempDir)
-                if self.windows:
-                    (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
-                else:
-                    (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
+                #Clone the remote git repo
+                (output, stderrout, res) = self.clone_git_dir()
                 if res == False:
                     logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                     sys.exit(1)
@@ -1137,10 +1396,7 @@ class SplunkVersionControlRestore:
                     continue
 
                 #Do a git pull to ensure we are up-to-date
-                if self.windows:
-                    (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s" % (self.gitTempDir, self.git_command, tag), logger, shell=True)
-                else:
-                    (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s" % (self.gitTempDir, self.git_command, tag), logger, shell=True)
+                (output, stderrout, res) = self.git_pull(tag)
                 if res == False:
                     logger.error("i=\"%s\" user=%s, object name=%s, type=%s, time=%s, git checkout of tag=%s failed in directory dir=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, user, name, type, time, tag, self.gitTempDir, output, stderrout))
                 else:
@@ -1204,6 +1460,7 @@ class SplunkVersionControlRestore:
                     (result, message) = self.times(app, name, scope, user, restoreAsUser, adminLevel)
                 else:
                     logger.error("i=\"%s\" user=%s, unknown type, no restore will occur for object=%s of type=%s in app=%s to be restored with restoreAsUser=%s and time=%s" % (self.stanzaName, user, name, type, app, restoreAsUser, time))
+                    message = "unknown knowledge object with type=%s" % type
 
         if not restlist_override:
             #Wipe the lookup file so we do not attempt to restore these entries again

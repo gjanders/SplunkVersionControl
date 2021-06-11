@@ -15,6 +15,7 @@ from datetime import datetime,timedelta
 import shutil
 from io import open
 import platform
+import hashlib
 from splunkversioncontrol_utility import runOSProcess, get_password
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
@@ -128,7 +129,7 @@ class SplunkVersionControlBackup:
         url = self.splunk_rest + "/services/apps/local?search=disabled%3D0&count=0&f=title"
 
         logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s, proxies_length=%s, sslVerify=%s to obtain a list of all applications" % (self.stanzaName, url, self.srcUsername, len(self.proxies), self.sslVerify))
-        #no srcUsername, use the session_key method    
+        #no srcUsername, use the session_key method
         headers = {}
         auth = None
         
@@ -388,25 +389,113 @@ class SplunkVersionControlBackup:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=%s with sharing=global in app=%s into dir=%s" % (self.stanzaName, type, app, globalStorageDir))
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
-            with open(globalStorageDir + "/" + type, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(infoList["global"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                global_type_dir = globalStorageDir + "/" + type
+                files, dirs = self.write_files(global_type_dir, infoList["global"])
+                self.remove_dir_contents(files, dirs, type, "global")
+            else:
+                # in the original method we dumped 1 large file with all objects of this type at this scope
+                with open(globalStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(infoList["global"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "app" in infoList:
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s with sharing=app in app=%s into dir=%s" % (self.stanzaName, type, app, appLevelStorageDir))
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
-            with open(appLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(infoList["app"], sort_keys=True)))
+            if self.file_per_ko:
+                app_type_dir = appLevelStorageDir + "/" + type
+                files, dirs = self.write_files(app_type_dir, infoList["app"])
+                self.remove_dir_contents(files, dirs, type, "app")
+            else:
+            # in the original method we dumped 1 large file with all objects of this type at this scope
+                with open(appLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(infoList["app"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "user" in infoList:
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
             logger.debug("i=\"%s\" Now persisting with knowledge objects of type=%s sharing=user (private) in app=%s into dir=%s" % (self.stanzaName, type, app, userLevelStorageDir))
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
-            with open(userLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(infoList["user"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                user_type_dir = userLevelStorageDir + "/" + type
+                files, dirs = self.write_files(user_type_dir, infoList["user"])
+                self.remove_dir_contents(files, dirs, type, "user")
+            else:
+                # in the original method we dumped 1 large file with all objects of this type at this scope
+                with open(userLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(infoList["user"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         return creationSuccess
+
+    ###########################
+    #
+    # Shared function to list contents of a directory in terms of directories/files
+    #
+    ###########################
+    def list_dir_contents(self, path):
+        file_list = []
+        dir_list = []
+        for root, directories, files in os.walk(path):
+            for name in files:
+                file_list.append(os.path.join(root, name))
+            for name in directories:
+                dir_list.append(os.path.join(root, name))
+        return file_list, dir_list
+
+    ###########################
+    #
+    # Shared function to remove old files/directories
+    #
+    ###########################
+    def remove_dir_contents(self, files, dirs, type, scope):
+        # At this point we have zero or more files that may have been deleted from splunk but exist on the filesystem
+        logger.info("i=\"%s\" the following files were left after completing the backup at scope=%s for type=%s list=\"%s\"" % (self.stanzaName, scope, type, files))
+        for a_file in files:
+            logger.info("i=\"%s\" removing file=\"%s\"" % (self.stanzaName, a_file))
+            os.remove(a_file)
+            # some files were removed, delete empty directories too
+            if len(files) > 0:
+                for a_dir in dirs:
+                    if len(os.listdir(a_dir)) == 0:
+                        logger.info("i=\"%s\" removing empty dir=\"%s\"" % (self.stanzaName, a_dir))
+
+    ###########################
+    #
+    # Shared function to write each individual file out
+    #
+    ###########################
+    def write_files(self, dir, objects):
+        if not os.path.isdir(dir):
+            os.mkdir(dir)
+        files, dirs = self.list_dir_contents(dir)
+        for an_object in objects:
+            #per-object see if we need to create the directory
+            an_object_dir = dir + "/" + an_object["owner"]
+            if not os.path.isdir(an_object_dir):
+                os.mkdir(an_object_dir)
+            # if a file exceeds 255 characters it will result in a file too long error (e.g. really long field extraction names
+            file_name = six.moves.urllib.parse.quote_plus(an_object["name"])
+            if len(file_name) > 254:
+                hash = hashlib.md5(an_object["name"].encode('utf-8')).hexdigest()
+                file_name = file_name[0:222] + hash
+            an_object_file = an_object_dir + "/" + file_name
+            with open(an_object_file, 'w', encoding="utf-8") as f:
+                f.write(six.text_type(json.dumps(an_object, sort_keys=True, indent=0)))
+                # add newline so git doesn't think it's different every commit...
+                f.write("\n")
+            try:
+                files.remove(an_object_file)
+            except:
+                pass
+        return files, dirs
 
     ###########################
     #
@@ -548,24 +637,51 @@ class SplunkVersionControlBackup:
             globalStorageDir = appStorageDir + "/global"
             if not os.path.isdir(globalStorageDir):
                 os.mkdir(globalStorageDir)
-            with open(globalStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(macros["global"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                global_macro_dir = globalStorageDir + "/macros"
+                files, dirs = self.write_files(global_macro_dir, macros["global"])
+                self.remove_dir_contents(files, dirs, "macros", "global")
+            else:
+                # in the original method we dumped 1 large file with all macros at this scope
+                with open(globalStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(macros["global"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "app" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=app in app=%s" % (self.stanzaName, app))
             #persist app level to disk
             appLevelStorageDir = appStorageDir + "/app"
             if not os.path.isdir(appLevelStorageDir):
                 os.mkdir(appLevelStorageDir)
-            with open(appLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(macros["app"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                app_macro_dir = appLevelStorageDir + "/macros"
+                files, dirs = self.write_files(app_macro_dir, macros["app"])
+                self.remove_dir_contents(files, dirs, "macros", "app")
+            else:
+                # in the original method we dumped 1 large file with all macros at this scope
+                with open(appLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(macros["app"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
         if "user" in macros:
             logger.debug("i=\"%s\" Now persisting knowledge objects of type=macro with sharing=user (private) in app %s" % (self.stanzaName, app))
             #persist user level to disk
             userLevelStorageDir = appStorageDir + "/user"
             if not os.path.isdir(userLevelStorageDir):
                 os.mkdir(userLevelStorageDir)
-            with open(userLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(macros["user"], sort_keys=True)))
+            if self.file_per_ko:
+                # in the file per-ko method we want 1 file per knowledge object...
+                user_macro_dir = userLevelStorageDir + "/macros"
+                files, dirs = self.write_files(user_macro_dir, macros["user"])
+                self.remove_dir_contents(files, dirs, "macros", "user")
+            else:
+                # in the original method we dumped 1 large file with all macros at this scope
+                with open(userLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
+                    f.write(six.text_type(json.dumps(macros["user"], sort_keys=True, indent=0)))
+                    # add newline so git doesn't think it's different every commit...
+                    f.write("\n")
             
         return macroCreationSuccess
 
@@ -593,7 +709,7 @@ class SplunkVersionControlBackup:
     # 
     ###########################
     def savedsearches(self, app):
-        ignoreList = [ "embed.enabled", "triggered_alert_count" ]
+        ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time" ]
             
         return self.runQueries(app, "/saved/searches", "savedsearches", ignoreList)
 
@@ -771,6 +887,47 @@ class SplunkVersionControlBackup:
             if appName in appList:
                 appList.remove(appName)
 
+    # clone the git directory to the filesystem
+    def clone_git_dir(self, config):
+        if self.windows:
+            clone_str = "cd /d {0} & {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                clone_str = "set HTTPS_PROXY=" + self.git_proxies["https"] + " & " + clone_str
+            if 'git_name' in config:
+                clone_str = clone_str + " & {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+            if 'git_email' in config:
+                clone_str = clone_str + " & {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
+        else:
+            clone_str = "cd {0}; {1} clone {2} 2>&1".format(self.gitRootDir, self.git_command, self.gitRepoURL)
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                clone_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + clone_str
+            if 'git_name' in config:
+                clone_str = clone_str + " ; {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+            if 'git_email' in config:
+                clone_str = clone_str + " ; {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
+        (output, stderrout, res) = runOSProcess(clone_str, logger, timeout=300, shell=True)
+        return (output, stderrout, res)
+
+    # run the git pull
+    def run_git_pull(self):
+        #Always start from the git branch and the current version (just in case changes occurred)
+        if self.windows:
+            pull_str = "cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command)
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                pull_str = "set HTTPS_PROXY=" + self.git_proxies["https"] + " & " + pull_str
+            (output, stderrout, res) = runOSProcess(pull_str, logger, timeout=300, shell=True)
+        else:
+            pull_str = "cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command)
+            if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                pull_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + pull_str
+            (output, stderrout, res) = runOSProcess(pull_str, logger, timeout=300, shell=True)
+        return (output, stderrout, res)
+
+    ###########################
+    #
+    # per-app helper (runs the backup logic per-app)
+    #
+    ##########################
     #Working on a per app basis, trigger the backup of the relevant types of objects
     def perApp(self, srcApp, macrosRun, tagsRun, eventtypesRun, calcFieldsRun, fieldAliasRun, fieldTransformsRun, fieldExtractionRun, collectionsRun, lookupDefinitionRun, automaticLookupRun, timesRun, viewstatesRun, panelsRun, datamodelsRun, dashboardsRun, savedsearchesRun, workflowActionsRun, sourcetypeRenamingRun, navMenuRun):
         ###########################
@@ -992,6 +1149,12 @@ class SplunkVersionControlBackup:
         
         self.gitRepoURL = config['gitRepoURL']
 
+        # a flag for a http/https vs SSH based git repo
+        if self.gitRepoURL.find("http") == 0:
+            self.gitRepoHTTP = True
+        else:
+            self.gitRepoHTTP = False
+
         if 'git_command' in config:
             self.git_command = config['git_command'].strip()
             logger.debug("Overriding git command to %s" % (self.git_command))
@@ -1027,6 +1190,18 @@ class SplunkVersionControlBackup:
 
         self.proxies = proxies
 
+        git_proxies = {}
+        if 'git_proxy' in config:
+            git_proxies['https'] = config['git_proxy']
+            if git_proxies['https'].find("password:") != -1:
+                start = git_proxies['https'].find("password:") + 9
+                end = git_proxies['https'].find("@")
+                logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
+                temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+                git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
+
+        self.git_proxies = git_proxies
+
         if 'sslVerify' in config:
             if config['sslVerify'].lower() == 'true':
                 self.sslVerify = True
@@ -1037,6 +1212,16 @@ class SplunkVersionControlBackup:
             else:
                 self.sslVerify = config['sslVerify']
                 logger.debug('sslverify set to: ' + config['sslVerify'])
+
+        self.file_per_ko = False
+        if 'file_per_ko' in config:
+            if config['file_per_ko'].lower() == 'true':
+                self.file_per_ko = True
+                logger.debug('file_per_ko set to boolean True from: ' + config['file_per_ko'])
+            elif config['file_per_ko'].lower() == 'false':
+                logger.debug('file_per_ko set to boolean False from: ' + config['file_per_ko'])
+            else:
+                logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"') % (self.stanzaName, config['file_per_ko'])
 
         #From server
         self.splunk_rest = config['srcURL']
@@ -1079,7 +1264,7 @@ class SplunkVersionControlBackup:
         logger.debug("i=\"%s\" AppList is (post trim) %s" % (self.stanzaName, appList))
 
         gitFailure = False
-        
+
         self.gitTempDir = config['gitTempDir']
         self.gitRootDir = config['gitTempDir']
         dirExists = os.path.isdir(self.gitTempDir)
@@ -1092,27 +1277,14 @@ class SplunkVersionControlBackup:
             if not dirExists:
                 #make the directory and clone under here
                 os.mkdir(self.gitTempDir)
-            #Initially we must trust our remote repo URL
-            (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
-            if res == False:
-                logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
-            
-            (output, stderrout, res) = runOSProcess("%s clone %s %s" % (self.git_command, self.gitRepoURL, self.gitRootDir), logger, timeout=300)
 
-            if self.windows:
-                clone_str = "cd /d {0} & {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
-                if 'git_name' in config:
-                    clone_str = clone_str + " & {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
-                if 'git_email' in config:
-                    clone_str = clone_str + " & {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
-            else:
-                clone_str = "cd {0}; {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
-                if 'git_name' in config:
-                    clone_str = clone_str + " ; {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
-                if 'git_email' in config:
-                    clone_str = clone_str + " ; {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
-            (output, stderrout, res) = runOSProcess(clone_str, logger, timeout=300, shell=True)
+            if not self.gitRepoHTTP:
+                #Initially we must trust our remote repo URL
+                (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
+                if res == False:
+                    logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
 
+            (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1122,6 +1294,7 @@ class SplunkVersionControlBackup:
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
                     logger.debug("gitTempDir=%s" % (self.gitTempDir))
+
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1182,17 +1355,13 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
         
         #Always start from the git branch and the current version (just in case changes occurred)
-        if self.windows:
-            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
-        else:
-            (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
+        (output, stderrout, res) = self.run_git_pull()
         if res == False:
             logger.warn("i=\"%s\" git checkout %s or git pull failed, stdout is '%s' stderrout is '%s'. Wiping git directory" % (self.stanzaName, self.git_branch, output, stderrout))
+
             shutil.rmtree(self.gitTempDir)
-            if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
-            else:
-                (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
+
+            (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1321,27 +1490,13 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" Completed working with app=%s" % (self.stanzaName, app))
 
         #Always start from the git branch and the current version (just in case someone was messing around in the temp directory)
-        if self.windows:
-            (output, stderrout, res) = runOSProcess("cd /d %s & %s checkout %s & %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
-        else:
-            (output, stderrout, res) = runOSProcess("cd %s; %s checkout %s; %s pull" % (self.gitTempDir, self.git_command, self.git_branch, self.git_command), logger, timeout=300, shell=True)
+        (output, stderrout, res) = self.run_git_pull()
         if res == False:
             logger.warn("i=\"%s\" git checkout %s or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, self.git_branch, output, stderrout))
+
             shutil.rmtree(self.gitTempDir)
 
-            if self.windows:
-                clone_str = "cd /d {0} & {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
-                if 'git_name' in config:
-                    clone_str = clone_str + " & {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
-                if 'git_email' in config:
-                    clone_str = clone_str + " & {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
-            else:
-                clone_str = "cd {0}; {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
-                if 'git_name' in config:
-                    clone_str = clone_str + " ; {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
-                if 'git_email' in config:
-                    clone_str = clone_str + " ; {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
-            (output, stderrout, res) = runOSProcess(clone_str, logger, timeout=300, shell=True)
+            (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
                 sys.exit(1)
@@ -1361,9 +1516,15 @@ class SplunkVersionControlBackup:
             #We have one or more files to commit, do something
             todaysDate = datetime.now().strftime("%Y-%m-%d_%H%M")
             if self.windows:
-                (output, stderrout, res) = runOSProcess("cd /d {0} & {3} add -A & {3} commit -am \"Updated by Splunk Version Control backup job {1}\" & {3} tag {2} & {3} push origin %s --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
+                push_str = "cd /d {0} & {3} add -A & {3} commit -am \"Updated by Splunk Version Control backup job {1}\" & {3} tag {2} & {3} push origin {4} --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch)
+                if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                    push_str = "set HTTPS_PROXY=" + self.git_proxies["https"] + " & " + push_str
+                (output, stderrout, res) = runOSProcess(push_str, logger, timeout=300, shell=True)
             else:
-                (output, stderrout, res) = runOSProcess("cd {0}; {3} add -A; {3} commit -am \"Updated by Splunk Version Control backup job {1}\"; {3} tag {2}; {3} push origin %s --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch,), logger, timeout=300, shell=True)
+                push_str = "cd {0}; {3} add -A; {3} commit -am \"Updated by Splunk Version Control backup job {1}\"; {3} tag {2}; {3} push origin {4} --tags".format(self.gitTempDir, self.stanzaName, todaysDate, self.git_command, self.git_branch)
+                if len(self.git_proxies) > 0 and self.gitRepoHTTP:
+                    push_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + push_str
+                (output, stderrout, res) = runOSProcess(push_str, logger, timeout=300, shell=True)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             

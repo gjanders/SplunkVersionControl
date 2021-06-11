@@ -166,6 +166,11 @@ There are also many online resources to help with learning git
 - git_name - optional, if provided runs git config user.name to override the name used on this particular repository for git commits
 - git_email - optional, if provided runs git config user.email to override the email used on this particular repository for git commits
 "More settings"
+- git_branch - optional, sets the git branch to use, defaults to master
+- git_proxy - optional, if supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
+- file_per_ko - optional, do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this setting you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo
+
+"More settings"
 - interval - how often the backup should run, if not set the backup will only run on restart of the Splunk instance or when you save this configuration...
 
 ### Splunk Version Control Restore
@@ -182,6 +187,9 @@ There are also many online resources to help with learning git
 - git_command - optional, the location of the git command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk
 - ssh_command - optional, the location of the ssh command, this is mainly used on Windows where the git command may not be in the PATH of the user running Splunk 
 - proxy - optional, if supplied provides a proxy setting to use to access the destURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry "passwordinpasswordsconf". If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
+- git_branch - optional, sets the git branch to use, defaults to master
+- git_proxy - optional, if supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
+- file_per_ko - optional, do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this setting you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo
 
 "More settings"
 - interval - how often should the remote server be checked to see if a restore is required. If you are on-prem and using the dynamic restore dashboard you do not need to set an interval, if this is a cloud based system or using the non-dynamic dashboard this is the interval to check the remote server for if a restore needs to be run (i.e. how long it is between a user requesting a restore and this script checking/polling the remote system to run the restoration job)
@@ -266,6 +274,23 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.2.0
+This version includes a few major changes:
+- `file_per_ko` mode, disabled by default, if enabled outputs 1 file per knowledge object instead of including all knowledge objects of a type within 1 file
+- `next_scheduled_time` attribute removed from savedsearches (this results in less unnnessary git commits)
+- code updated so that newlines are used in the json files, this makes the files stored in git more human readable and easier to see what changed between backups
+- support added for http/https based git repositories in addition to ssh-based repo's
+
+If you would like to use `file_per_ko` this will result in a lot more files in the git repository but this will make it easier to see the history of changes in each file
+
+Note that you must set `file_per_ko` to true in both the backup & restore for this to work as expected, also if you change the setting you will need to re-create or wipe the repo as the files are stored differently
+
+Updated all dashboards to include version="1.1" tag as required by new Splunk versions
+
+Updated to Splunk python SDK 1.1.16
+
+This version fixes a bug introduced by 1.1.13, version 1.1.13 was removed from SplunkBase due to an error in the code
+
 ### 1.1.13
 Updated saved search `Splunk Version Control Audit Query POST` with new regex
 
