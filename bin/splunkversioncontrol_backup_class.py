@@ -22,11 +22,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from splunklib import six
 
 """
- 
+
  Store Knowledge Objects
    Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
    to restore the knowledge object if it was deleted/changed to the filesystem
- 
+
 """
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
@@ -47,7 +47,7 @@ logging_config = dict(
               'maxBytes' :  2097152,
               'level': logging.DEBUG,
               'backupCount' : 5 }
-        },        
+        },
     root = {
         'handlers': ['h','file'],
         'level': logging.DEBUG,
@@ -132,12 +132,12 @@ class SplunkVersionControlBackup:
         #no srcUsername, use the session_key method
         headers = {}
         auth = None
-        
+
         if not self.srcUsername:
             headers={'Authorization': 'Splunk %s' % self.session_key}
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
-        
+
         res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.fatal("i=\"%s\" Could not obtain a list of all apps, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
@@ -145,7 +145,7 @@ class SplunkVersionControlBackup:
 
         #Splunk returns data in XML format, use the element tree to work through it
         root = ET.fromstring(res.text)
-        
+
         for child in root:
             #Working per entry in the results
             if child.tag.endswith("entry"):
@@ -157,7 +157,7 @@ class SplunkVersionControlBackup:
                         appList.append(name)
                         logger.debug("i=\"%s\" name=\"%s\" is the app added to the list" % (self.stanzaName, name))
         return appList
-        
+
     #As per https://stackoverflow.com/questions/1101508/how-to-parse-dates-with-0400-timezone-string-in-python/23122493#23122493
     def determineTime(self, timestampStr):
         logger.debug("i=\"%s\" attempting to convert %s to timestamp" % (self.stanzaName, timestampStr))
@@ -174,27 +174,27 @@ class SplunkVersionControlBackup:
     # runQueries (generic version)
     #   For each knowledge object type / app query the remote Splunk instance to obtain the configuration
     #   then persist the required configuration to the filesystem
-    # 
+    #
     ###########################
-    def runQueries(self, app, endpoint, type, fieldIgnoreList, aliasAttributes={}, valueAliases={}, nameOverride="", override=False):
+    def runQueries(self, app, endpoint, type, fieldIgnoreList, aliasAttributes={}, valueAliases={}, nameOverride="", override=False, extra_args=""):
         creationSuccess = []
         #Keep a success list to be returned by this function
         #Use count=-1 to ensure we see all the objects
-        url = self.splunk_rest + "/servicesNS/-/" + app + endpoint + "?count=-1"
+        url = self.splunk_rest + "/servicesNS/-/" + app + endpoint + "?count=-1" + extra_args
         logger.debug("i=\"%s\" Running requests.get() on %s user=%s in app=%s, proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies), self.sslVerify))
 
         headers = {}
         auth = None
-        
+
         if not self.srcUsername:
             headers={'Authorization': 'Splunk %s' % self.session_key}
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
-        
+
         res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
-        
+
         #Splunk returns data in XML format, use the element tree to work through it
         root = ET.fromstring(res.text)
 
@@ -215,7 +215,7 @@ class SplunkVersionControlBackup:
                         #but updates require the original name
                         if 'name' in list(aliasAttributes.values()):
                             info["origName"] = title
-                        
+
                         logger.debug("i=\"%s\" name=\"%s\" is the entry for type=%s in app=%s" % (self.stanzaName, title, type, app))
                         #If we have an include/exclude list we deal with that scenario now
                         if self.includeEntities:
@@ -230,6 +230,10 @@ class SplunkVersionControlBackup:
                                 break
                     #Content apepars to be where 90% of the data we want is located
                     elif innerChild.tag.endswith("content"):
+
+                        # optimisation to deal with the giant display.visualizations... on savedsearches only
+                        skip_visualizations = True
+
                         for theAttribute in innerChild[0]:
                             #acl has the owner, sharing and app level which we required (sometimes there is eai:app but it's not 100% consistent so this is safer
                             #also have switched from author to owner as it's likely the safer option...
@@ -253,7 +257,7 @@ class SplunkVersionControlBackup:
                                     #owner is seen as a nicer alternative to the author variable
                                     elif theList.attrib['name'] == 'owner':
                                         owner = theList.text
-                                        
+
                                         #If we have include or exlcude owner lists we deal with this now
                                         if self.includeOwner:
                                             if not owner in self.includeOwner:
@@ -271,37 +275,37 @@ class SplunkVersionControlBackup:
                             else:
                                 #We have other attributes under content, we want the majority of them
                                 attribName = theAttribute.attrib['name']
-                                
+
                                 #Under some circumstances we want the attribute and contents but we want to call it a different name...
                                 if attribName in aliasAttributes:
                                     attribName = aliasAttributes[attribName]
-                                
+
                                 #If it's disabled *and* we don't want disabled objects we can determine this here
                                 if attribName == "disabled" and self.noDisabled and theAttribute.text == "1":
                                     logger.debug("i=\"%s\" name=\"%s\" of type=%s is disabled and the noDisabled flag is true, excluding this in app=%s" % (self.stanzaName, info["name"], type, app))
                                     keep = False
                                     break
-                                    
+
                                 #Field extractions change from "Uses transform" to "REPORT" And "Inline" to "EXTRACTION" for some strange reason...
                                 #therefore we have a list of attribute values that we deal with here which get renamed to the provided values
                                 if theAttribute.text in valueAliases:
                                     theAttribute.text = valueAliases[theAttribute.text]
-                                
+
                                 logger.debug("i=\"%s\" name=\"%s\" of type=%s found key/value of %s=%s in app context app=%s" % (self.stanzaName, info["name"], type, attribName, theAttribute.text, app))
 
-                                #Yet another hack, this time to deal with collections using accelrated_fields.<value> when looking at it via REST GET requests, but
+                                #Yet another hack, this time to deal with collections using accelerated_fields.<value> when looking at it via REST GET requests, but
                                 #requiring accelerated_fields to be used when POST'ing the value to create the collection!
                                 if type == "collections (kvstore definition)" and attribName.find("accelrated_fields") == 0:
                                     attribName = "accelerated_fields" + attribName[17:]
-                                
+
                                 #Hack to deal with datamodel tables not working as expected
                                 if attribName == "description" and type=="datamodels" and "dataset.type" in info and info["dataset.type"] == "table":
                                     #For an unknown reason the table datatype has extra fields in the description which must be removed
                                     #however we have to find them first...
                                     res = json.loads(theAttribute.text)
                                     fields = res['objects'][0]['fields']
-                                    #We're looking through the dictionary and deleting from it so copy 
-                                    #the dictionary so we can safely iterate through while deleting from the 
+                                    #We're looking through the dictionary and deleting from it so copy
+                                    #the dictionary so we can safely iterate through while deleting from the
                                     #real copy
                                     fieldCopy = copy.deepcopy(fields)
 
@@ -311,12 +315,20 @@ class SplunkVersionControlBackup:
                                         if name != "RootObject":
                                             index = fields.index(field)
                                             del fields[index]
-                                    
+
                                     res = json.dumps(res)
                                     info[attribName] = res
+                                #Optimisation related to savedsearches if we're not a saved search using the visualisations tab, don't backup the display.visualizations...
+                                elif type=="savedsearches" and attribName == "display.general.type" and theAttribute.text=="visualizations":
+                                    logger.debug("i=\"%s\" name=\"%s\" of type=%s found %s=%s in app context app=%s changing skip_visualizations to false" % (self.stanzaName, info["name"], type, attribName, theAttribute.text, app))
+                                    info[attribName] = theAttribute.text
+                                    skip_visualizations = False
                                 #We keep the attributes that are not None
                                 elif theAttribute.text:
-                                    info[attribName] = theAttribute.text
+                                    if skip_visualizations and attribName.find("display.visualizations.") == 0:
+                                        logger.debug("i=\"%s\" name=\"%s\" of type=%s found %s=%s in app context app=%s skipping as skip_visualizations is true" % (self.stanzaName, info["name"], type, attribName, theAttribute.text, app))
+                                    else:
+                                        info[attribName] = theAttribute.text
                                 #A hack related to automatic lookups, where a None / empty value must be sent through as "", otherwise requests will strip the entry from the
                                 #post request. In the case of an automatic lookup we want to send through the empty value...
                                 elif type=="automatic lookup" and theAttribute.text == None:
@@ -328,7 +340,7 @@ class SplunkVersionControlBackup:
                     #Updated time was for our reference only, don't try to send that in while creating/updating the object
                     updated = info["updated"]
                     del info["updated"]
-                    
+
                     if nameOverride != "":
                         #keep a copy of the original name for use when checking if the object exists
                         info["origName"] = info["name"]
@@ -355,19 +367,19 @@ class SplunkVersionControlBackup:
                     for attribName in fieldIgnoreList:
                         if attribName in info:
                             del info[attribName]
-                    
+
                     #Add this to the infoList
                     sharing = info["sharing"]
                     if sharing not in infoList:
                         infoList[sharing] = []
-                        
+
                     #REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
                     if type == "fieldtransformations" and "FORMAT" in info and info["FORMAT"] == "nullQueue":
                         logger.info("i=\"%s\" Dropping the backup of name=\"%s\" of type=%s in app context app=%s with owner=%s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     else:
                         infoList[sharing].append(info)
                         logger.info("i=\"%s\" Recording name=\"%s\" info for type=%s in app context app=%s with owner=%s" % (self.stanzaName, info["name"], type, app, info["owner"]))
-                    
+
                     logger.debug("Updated time is updated=%s" % (updated))
                     epochUpdatedTime = int((self.determineTime(updated) - datetime(1970,1,1)).total_seconds())
                     logger.debug("epochUpdatedTime=%s" % (epochUpdatedTime))
@@ -375,12 +387,12 @@ class SplunkVersionControlBackup:
                         logger.info("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, info["name"], type, app, info["owner"], updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, info["name"], type, app, info["owner"], updated, epochUpdatedTime, self.lastRunEpoch))
                     creationSuccess.append(info["name"])
-        
+
         #Find the storage directory for this app and create it if required
         appStorageDir = self.gitTempDir + "/" + app
         if not os.path.isdir(appStorageDir):
             os.mkdir(appStorageDir)
-        
+
         #Cycle through each one we need to backup, we do global/app/user as users can duplicate app level objects with the same names
         #but we create everything at user level first then re-own it so global/app must happen first
         if "global" in infoList:
@@ -500,7 +512,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # macros
-    # 
+    #
     ###########################
     #macro use cases are slightly different to everything else on the REST API
     #enough that this code has not been integrated into the runQuery() function
@@ -508,23 +520,23 @@ class SplunkVersionControlBackup:
     def macros(self, app):
         macros = {}
         macroCreationSuccess = []
-        
+
         #servicesNS/-/-/properties/macros doesn't show private macros so using /configs/conf-macros to find all the macros
         #again with count=-1 to find all the available macros
         url = self.splunk_rest + "/servicesNS/-/" + app + "/configs/conf-macros?count=-1"
         logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type macro proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies), self.sslVerify))
-        
+
         headers = {}
         auth = None
         if not self.srcUsername:
             headers={'Authorization': 'Splunk %s' % self.session_key}
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
-        
+
         res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" Type macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
-        
+
         #Parse the XML tree
         root = ET.fromstring(res.text)
         for child in root:
@@ -560,7 +572,7 @@ class SplunkVersionControlBackup:
                                     if theList.attrib['name'] == 'sharing':
                                         logger.debug("i=\"%s\" name=\"%s\" of type=macro sharing=%s in app=%s" % (self.stanzaName, macroInfo["name"], theList.text, app))
                                         macroInfo["sharing"] = theList.text
-                                        
+
                                         #If we are excluding private then check the sharing is not user level (private in the GUI)
                                         if self.noPrivate and macroInfo["sharing"] == "user":
                                             logger.debug("i=\"%s\" name=\"%s\" of type=macro found but the noPrivate flag is true, excluding this in app=%s" % (self.stanzaName, macroInfo["name"], app))
@@ -611,7 +623,7 @@ class SplunkVersionControlBackup:
                     if sharing not in macros:
                         macros[sharing] = []
                     macros[sharing].append(macroInfo)
-                    
+
                     #Updated time was for our reference only, don't try to send that in while creating/updating the object
                     updated = macroInfo["updated"]
                     del macroInfo["updated"]
@@ -628,7 +640,7 @@ class SplunkVersionControlBackup:
         appStorageDir = self.gitTempDir + "/" + app
         if not os.path.isdir(appStorageDir):
             os.mkdir(appStorageDir)
-        
+
         #Cycle through each one we need to migrate, we do global/app/user as users can duplicate app level objects with the same names
         #but we create everything at user level first then re-own it so global/app must happen first
         if "global" in macros:
@@ -682,7 +694,7 @@ class SplunkVersionControlBackup:
                     f.write(six.text_type(json.dumps(macros["user"], sort_keys=True, indent=0)))
                     # add newline so git doesn't think it's different every commit...
                     f.write("\n")
-            
+
         return macroCreationSuccess
 
 
@@ -692,12 +704,12 @@ class SplunkVersionControlBackup:
     #   These functions backup the various knowledge objects mainly by calling the runQueries
     #   with the appropriate options for that type
     #   Excluding macros, they have their own function
-    # 
+    #
     ###########################
     ###########################
     #
     # Dashboards
-    # 
+    #
     ###########################
     def dashboards(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:digest", "eai:userName", "isDashboard", "isVisible", "label", "rootNode", "description", "version" ]
@@ -706,23 +718,23 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # Saved Searches
-    # 
+    #
     ###########################
     def savedsearches(self, app):
         ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time" ]
-            
-        return self.runQueries(app, "/saved/searches", "savedsearches", ignoreList)
+
+        return self.runQueries(app, "/saved/searches", "savedsearches", ignoreList, extra_args="&listDefaultActionArgs=false")
 
     ###########################
     #
     # field definitions
-    # 
+    #
     ###########################
     def calcfields(self, app):
         ignoreList = [ "attribute", "type" ]
         aliasAttributes = { "field.name" : "name" }
         return self.runQueries(app, "/data/props/calcfields", "calcfields", ignoreList, aliasAttributes)
-        
+
     def fieldaliases(self, app):
         ignoreList = [ "attribute", "type", "value" ]
         return self.runQueries(app, "/data/props/fieldaliases", "fieldaliases", ignoreList, nameOverride="name")
@@ -734,7 +746,7 @@ class SplunkVersionControlBackup:
     def fieldtransformations(self, app):
         ignoreList = [ "attribute", "DEFAULT_VALUE", "DEPTH_LIMIT", "LOOKAHEAD", "MATCH_LIMIT", "WRITE_META", "eai:appName", "eai:userName", "DEST_KEY" ]
         return self.runQueries(app, "/data/transforms/extractions", "fieldtransformations", ignoreList)
-        
+
     def workflowactions(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:userName" ]
         return self.runQueries(app, "/data/ui/workflow-actions", "workflow-actions", ignoreList)
@@ -746,7 +758,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # tags
-    # 
+    #
     ##########################
     def tags(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:userName" ]
@@ -755,7 +767,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # eventtypes
-    # 
+    #
     ##########################
     def eventtypes(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:userName" ]
@@ -764,7 +776,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # navMenus
-    # 
+    #
     ##########################
     def navMenu(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:userName", "eai:digest", "rootNode" ]
@@ -774,7 +786,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # data models
-    # 
+    #
     ##########################
     def datamodels(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:userName", "eai:digest", "eai:type", "acceleration.allowed" ]
@@ -818,7 +830,7 @@ class SplunkVersionControlBackup:
     def panels(self, app):
         ignoreList = [ "disabled", "eai:digest", "panel.title", "rootNode", "eai:appName", "eai:userName" ]
         return self.runQueries(app, "/data/ui/panels", "pre-built_dashboard_panels", ignoreList)
-        
+
     ###########################
     #
     # lookups (definition/automatic)
@@ -855,8 +867,8 @@ class SplunkVersionControlBackup:
         url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
         logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\", proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, query, len(self.proxies), self.sslVerify))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot" }
-        
-        #no srcUsername, use the session_key method    
+
+        #no srcUsername, use the session_key method
         headers = {}
         auth = None
         if not self.srcUsername:
@@ -867,7 +879,7 @@ class SplunkVersionControlBackup:
         if (res.status_code != requests.codes.ok):
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
         res = json.loads(res.text)
-        
+
         #Log return messages from Splunk, often these advise of an issue but not always...
         if len(res["messages"]) > 0:
             firstMessage = res["messages"][0]
@@ -877,7 +889,7 @@ class SplunkVersionControlBackup:
             else:
                 logger.warn("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
         return res
-    
+
     #We keep a remote excluded app list so we don't backup anything that we are requested not to backup...
     def removeExcludedApps(self, appList):
         res = self.runSearchJob("| inputlookup splunkversioncontrol_globalexclusionlist")
@@ -1021,12 +1033,12 @@ class SplunkVersionControlBackup:
             logger.info("i=\"%s\" Begin viewstates transfer for app=%s" % (self.stanzaName, srcApp))
             viewstatesSuccess = self.viewstates(srcApp)
             logger.info("i=\"%s\" End viewstates transfer for app=%s" % (self.stanzaName, srcApp))
-            
+
         if panelsRun:
             logger.info("i=\"%s\" Begin pre-built dashboard panels transfer for app=%s" % (self.stanzaName, srcApp))
             panelsSuccess = self.panels(srcApp)
             logger.info("i=\"%s\" End pre-built dashboard panels transfer for app=%s" % (self.stanzaName, srcApp))
-            
+
         if datamodelsRun:
             logger.info("i=\"%s\" Begin datamodels transfer for app=%s" % (self.stanzaName, srcApp))
             datamodelSuccess = self.datamodels(srcApp)
@@ -1075,13 +1087,13 @@ class SplunkVersionControlBackup:
         self.logStats(navMenuSuccess, "navMenu", srcApp)
         self.logStats(collectionsSuccess, "collections", srcApp)
         self.logStats(timesSuccess, "times (conf-times)", srcApp)
-        self.logStats(panelsSuccess, "pre-built dashboard panels", srcApp)    
+        self.logStats(panelsSuccess, "pre-built dashboard panels", srcApp)
 
     ###########################
     #
     # Main logic section
     #
-    ##########################    
+    ##########################
     def run_script(self):
         config = self.get_config()
         #If we want debugMode, keep the debug logging, otherwise leave this at INFO level
@@ -1089,10 +1101,10 @@ class SplunkVersionControlBackup:
             debugMode = config['debugMode'].lower()
             if debugMode == "true" or debugMode == "t":
                 logging.getLogger().setLevel(logging.DEBUG)
-        
+
         #stanza_name without the splunkversioncontrol_backup://
         self.stanzaName = config["name"].replace("splunkversioncontrol_backup://", "")
-        
+
         ###########################
         #
         # Include/Exclude lists
@@ -1105,27 +1117,27 @@ class SplunkVersionControlBackup:
 
         if 'excludeEntities' in config:
             self.excludeEntities = [x.strip() for x in config['excludeEntities'].split(',')]
-            
+
         if 'excludeOwner' in config:
             self.excludeOwner = [x.strip() for x in config['excludeOwner'].split(',')]
 
         if 'includeOwner' in config:
             self.includeOwner = [x.strip() for x in config['includeOwner'].split(',')]
-        
+
         if 'noPrivate' in config:
             self.noPrivate = config['noPrivate'].lower()
             if self.noPrivate == "true" or self.noPrivate=="t":
                 self.noPrivate = True
             else:
                 self.noPrivate = False
-                
+
         if 'noDisabled' in config:
             self.noDisabled = config['noDisabled'].lower()
             if self.noDisabled == "true" or self.noDisabled=="t":
                 self.noDisabled = True
             else:
                 self.noDisabled = False
-        
+
         useLocalAuth = False
         if 'useLocalAuth' in config:
             useLocalAuth = config['useLocalAuth'].lower()
@@ -1134,19 +1146,19 @@ class SplunkVersionControlBackup:
                 logger.debug("useLocalAuth enabled")
             else:
                 useLocalAuth = False
-        
+
         #If we're not using the useLocalAuth we must have a username/password to work with
         if useLocalAuth == False and ('srcUsername' not in config or 'srcPassword' not in config):
             logger.fatal("i=\"%s\" useLocalAuth is not set to true and srcUsername/srcPassword not set, exiting with failure" % (self.stanzaName))
             sys.exit(1)
-        
+
         if useLocalAuth == False:
             self.srcUsername = config['srcUsername']
             self.srcPassword = config['srcPassword']
 
         if 'remoteAppName' in config:
             self.appName = config['remoteAppName']
-        
+
         self.gitRepoURL = config['gitRepoURL']
 
         # a flag for a http/https vs SSH based git repo
@@ -1221,7 +1233,7 @@ class SplunkVersionControlBackup:
             elif config['file_per_ko'].lower() == 'false':
                 logger.debug('file_per_ko set to boolean False from: ' + config['file_per_ko'])
             else:
-                logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"') % (self.stanzaName, config['file_per_ko'])
+                logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"' % (self.stanzaName, config['file_per_ko']))
 
         #From server
         self.splunk_rest = config['srcURL']
@@ -1233,7 +1245,7 @@ class SplunkVersionControlBackup:
         #If we have not run before just backup everything
         currentEpochTime = calendar.timegm(time.gmtime())
         self.session_key = config['session_key']
-        
+
         headers={'Authorization': 'Splunk %s' % config['session_key']}
 
         url = 'https://localhost:8089/services/shcluster/captain/info?output_mode=json'
@@ -1298,7 +1310,7 @@ class SplunkVersionControlBackup:
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
-        
+
         lastRunEpoch = None
         appsWithChanges = None
         #Version Control File to record when we last ran
@@ -1316,7 +1328,7 @@ class SplunkVersionControlBackup:
                 self.lastRunEpoch = lastRunEpoch
                 appsWithChanges = {}
                 logger.info("i=\"%s\" %s reports a lastrun_epoch=%s using this date in report calls" % (self.stanzaName, versionControlFile, lastRunEpoch))
-                
+
                 #Run a query to determine which apps/types of knowledge objects have changed since the last run
                 res = self.runSearchJob("savedsearch \"SplunkVersionControl ChangeDetector Directory\" updatedEpoch=%s" % (lastRunEpoch))
                 resList = res["results"]
@@ -1329,7 +1341,7 @@ class SplunkVersionControlBackup:
                         app = aRes["app"]
                         type = aRes["type"]
                         logger.debug("i=\"%s\" Found changes to app=%s of type=%s" % (self.stanzaName, app, type))
-                        
+
                         if not app in appsWithChanges:
                             appsWithChanges[app] = []
                         appsWithChanges[app].append(type)
@@ -1345,15 +1357,15 @@ class SplunkVersionControlBackup:
                             continue
                         app = aRes["app"]
                         type = aRes["type"]
-                        
+
                         logger.debug("i=\"%s\" Found changes to app=%s of type=%s" % (self.stanzaName, app, type))
-                        
+
                         if not app in appsWithChanges:
                             appsWithChanges[app] = []
                         appsWithChanges[app].append(type)
         else:
             logger.info("i=\"%s\" %s does not exist, running against all apps now" % (self.stanzaName, versionControlFile))
-        
+
         #Always start from the git branch and the current version (just in case changes occurred)
         (output, stderrout, res) = self.run_git_pull()
         if res == False:
@@ -1367,11 +1379,11 @@ class SplunkVersionControlBackup:
                 sys.exit(1)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
-        
+
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
             gitFailure = True
-        
+
         knownAppList = []
         knownAppList = os.listdir(self.gitTempDir)
         logger.debug("i=\"%s\" Known app list is %s" % (self.stanzaName, knownAppList))
@@ -1446,7 +1458,7 @@ class SplunkVersionControlBackup:
                 if not app in appsWithChanges:
                     logger.info("i=\"%s\" No changes found in app=%s, skipping this apps configuration" % (self.stanzaName, app))
                     continue
-                
+
                 typeList = appsWithChanges[app]
                 if "macros" in typeList:
                     macrosRun = True
@@ -1502,11 +1514,11 @@ class SplunkVersionControlBackup:
                 sys.exit(1)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
-        
+
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
             gitFailure = True
-        
+
         #At this point we've written out the potential updates
         if self.windows:
             (output, stderrout, res) = runOSProcess("cd /d %s & %s status | findstr /C:\"nothing to commit\"" % (self.gitTempDir, self.git_command), logger, shell=True)
@@ -1527,7 +1539,7 @@ class SplunkVersionControlBackup:
                 (output, stderrout, res) = runOSProcess(push_str, logger, timeout=300, shell=True)
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
-            
+
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1544,5 +1556,5 @@ class SplunkVersionControlBackup:
             logger.error("i=\"%s\" git failure occurred during runtime, not updating the epoch value. This failure  may require investigation, please refer to the WARNING messages in the logs" % (self.stanzaName))
             logger.warn("i=\"%s\" wiping the git directory, dir=%s to allow re-cloning on next run of the script" % (self.stanzaName, self.gitTempDir))
             shutil.rmtree(self.gitTempDir)
-        
+
         logger.info("i=\"%s\" Done" % (self.stanzaName))
