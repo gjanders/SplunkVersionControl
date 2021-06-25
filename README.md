@@ -275,6 +275,11 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 
 ## Release Notes 
 ### 1.2.1
+This version includes some changes that should reduce the storage size of savedsearches, in particular:
+- listDefaultActionArgs=false is now used on the savedsearches REST endpoint
+- display.visualization.* is only backed up if display.general.type = visualizations, this should reduce the storage size of savedsearches
+ 
+Note that I have also created https://ideas.splunk.com/ideas/EID-I-1052 as a request to have a way to see the output of savedsearches that is closer to matching the filesystem rather than including 100's of default configuration lines into each savedsearch entry (256 display.visualizations.* attributes per-savedsearch in my prod environment at the time of writing)
 
 ### 1.2.0
 This version includes a few major changes:
