@@ -274,6 +274,8 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.2.2
+
 ### 1.2.1
 This version includes some changes that should reduce the storage size of savedsearches, in particular:
 - listDefaultActionArgs=false is now used on the savedsearches REST endpoint
