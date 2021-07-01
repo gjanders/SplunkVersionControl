@@ -23,11 +23,11 @@ from splunklib import six
 from unidiff import PatchSet
 
 """
- 
+
  Store Knowledge Objects
    Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
    to restore the knowledge object if it was deleted/changed to the filesystem
- 
+
 """
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
@@ -388,7 +388,7 @@ class SplunkVersionControlBackup:
                         logger.info("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s updated=true" % (self.stanzaName, info["name"], type, app, info["owner"], updated))
                     logger.debug("i=\"%s\" name=\"%s\" of type=%s in app context app=%s with owner=%s was updated at %s or epoch of %s compared to lastRunEpoch of %s" % (self.stanzaName, info["name"], type, app, info["owner"], updated, epochUpdatedTime, self.lastRunEpoch))
                     creationSuccess.append(info["name"])
-        
+
         #Find the storage directory for this app and create it if required
         appStorageDir = self.gitTempDir + "/" + app
         if not os.path.isdir(appStorageDir):
@@ -647,7 +647,7 @@ class SplunkVersionControlBackup:
     def macros(self, app):
         macros = {}
         macroCreationSuccess = []
-        
+
         #servicesNS/-/-/properties/macros doesn't show private macros so using /configs/conf-macros to find all the macros
         #again with count=-1 to find all the available macros
         url = self.splunk_rest + "/servicesNS/-/" + app + "/configs/conf-macros?count=-1"
@@ -831,7 +831,7 @@ class SplunkVersionControlBackup:
     #   These functions backup the various knowledge objects mainly by calling the runQueries
     #   with the appropriate options for that type
     #   Excluding macros, they have their own function
-    # 
+    #
     ###########################
     ###########################
     #
@@ -845,7 +845,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # Saved Searches
-    # 
+    #
     ###########################
     def savedsearches(self, app):
         ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time", "qualifiedSearch" ]
@@ -855,7 +855,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # field definitions
-    # 
+    #
     ###########################
     def calcfields(self, app):
         ignoreList = [ "attribute", "type" ]
@@ -873,7 +873,7 @@ class SplunkVersionControlBackup:
     def fieldtransformations(self, app):
         ignoreList = [ "attribute", "DEFAULT_VALUE", "DEPTH_LIMIT", "LOOKAHEAD", "MATCH_LIMIT", "WRITE_META", "eai:appName", "eai:userName", "DEST_KEY" ]
         return self.runQueries(app, "/data/transforms/extractions", "fieldtransformations", ignoreList)
-        
+
     def workflowactions(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:userName" ]
         return self.runQueries(app, "/data/ui/workflow-actions", "workflow-actions", ignoreList)
@@ -894,7 +894,7 @@ class SplunkVersionControlBackup:
     ###########################
     #
     # eventtypes
-    # 
+    #
     ##########################
     def eventtypes(self, app):
         ignoreList = [ "disabled", "eai:appName", "eai:userName" ]
