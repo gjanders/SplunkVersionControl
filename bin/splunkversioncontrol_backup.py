@@ -46,7 +46,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="gitRepoURL">
                 <title>gitRepoURL</title>
-                <description>git repository URL to store the objects (SSH URL only)</description>
+                <description>git repository URL to store the objects</description>
             </arg>
             <arg name="sslVerify">
                 <title>sslVerify</title>
