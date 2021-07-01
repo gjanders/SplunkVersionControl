@@ -8,7 +8,7 @@ srcPassword = <value>
 gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
-* git repository URL to store the objects
+* git repository URL to store the objects (SSH URL only)
 sslVerify = <boolean>
 * Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
 noPrivate = <boolean>
@@ -44,9 +44,13 @@ git_email = <value>
 git_branch = <value>
 * Sets the git branch to use, defaults to master
 git_proxy  = <value>
-* If supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
+* f supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
 file_per_ko = <boolean>
-* Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo
+* Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app)
+run_ko_query = <boolean>
+* Do you want to run a Splunk query to determine which knowledge objects changed? macro 'splunk_vc_ko_query' (defaults to false)
+run_ko_diff = <boolean>
+* Should output of the modular input include diff information (requires run_ko_query to be true, defaults to false)
 
 [splunkversioncontrol_restore://<name>]
 destURL = <value>
@@ -58,7 +62,7 @@ destPassword = <value>
 gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
-* git repository URL to restore the objects from
+* git repository URL to store the objects (SSH URL only)
 sslVerify = <boolean>
 * Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
 auditLogsLookupBackTime = <value>
@@ -80,6 +84,6 @@ proxy = <value>
 git_branch = <value>
 * Sets the git branch to use, defaults to master
 git_proxy  = <value>
-* If supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
+* f supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128</description>
 file_per_ko = <boolean>
-* Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo
+* Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app)

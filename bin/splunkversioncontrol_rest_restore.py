@@ -117,9 +117,11 @@ class SVCRestore(splunk.rest.BaseRestHandler):
 
         useLocalAuth = False
         if 'useLocalAuth' in json_dict:
-            if json_dict['useLocalAuth'].lower() == 't' or json_dict['useLocalAuth'].lower() == "true":
+            useLocalAuth = json_dict['useLocalAuth']
+            if isinstance(useLocalAuth, bool) and useLocalAuth:
                 useLocalAuth = True
-
+            elif useLocalAuth.lower() == 't' or useLocalAuth.lower() == "true":
+                useLocalAuth = True
         if not useLocalAuth:
             if not 'destUsername' in json_dict or not 'destPassword' in json_dict or not 'destURL' in json_dict:
                 logger.error("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
@@ -172,7 +174,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         logger.info("username=%s roles=%s" % (username, roles))
 
         app = payload['app'][0]
-        type = payload['type'][0]
+        obj_type = payload['type'][0]
         obj_name = payload['obj_name'][0]
         tag = payload['tag'][0]
         timeout = payload['timeout'][0]
@@ -206,7 +208,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             #we are at the point where we checked the remote instance and confirmed the user in question was allowed to request a restore, pass control
             #to the restore class to attempt the actual restore
             svc_restore_obj = SplunkVersionControlRestore()
-            resList = [{ 'app' : app, 'type': type, 'name': obj_name, 'tag': tag, 'scope': scope, 'time': starttime, 'restoreAsUser': restoreAsUser, 'user': username }]
+            resList = [{ 'app' : app, 'type': obj_type, 'name': obj_name, 'tag': tag, 'scope': scope, 'time': starttime, 'restoreAsUser': restoreAsUser, 'user': username }]
             #Name is required as part of the config dictionary, session_key is used if useLocalAuth is true in the config
             json_dict['name'] = "splunkversioncontrol_restore://" + splunk_vc_name
             json_dict['session_key'] = self.request['systemAuth']
@@ -214,12 +216,13 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             #Check current time and see if anyone is running a restore
             headers = { "Authorization" : "Splunk " + self.request['systemAuth'] }
             curtime = calendar.timegm(time.gmtime())
-            url = "https://localhost:8089/servicesNS/nobody/SplunkVersionControl/storage/collections/data/splunkversioncontrol_rest_restore_status"
+            url = "https://localhost:8089/servicesNS/nobody/" + remoteAppName + "/storage/collections/data/splunkversioncontrol_rest_restore_status"
             res = self.runHttpRequest(url, headers, None, "get", "checking kvstore collection splunkversioncontrol_rest_restore_status", sslVerify=False)
             if not res:
                 return
 
             res = json.loads(res.text)
+            res = ""
             #An empty list is good in this case, we are safe to run, if not we have checks to do
             if not len(res) == 0:
                 if not 'start_time' in res[0]:
@@ -244,15 +247,15 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             #update kvstore with runtime
             res = self.runHttpRequest(url, headers, payload, 'post', 'updating kvstore collection splunkversioncontrol_rest_restore_status', sslVerify=False)
             if not res:
-                return res
+                return
 
             (result, message) = svc_restore_obj.run_script(resList, json_dict)
             if result == True:
-                self.response.write("Restore has completed successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
-                logger.info("Restore has completed successfully in app=%s, object of type=%s, with name=%s was restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s" % (app, type, obj_name, tag, scope, restoreAsUser, username))
+                self.response.write("Restore has completed successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username))
+                logger.info("Restore has completed successfully in app=%s, object of type=%s, with name=%s was restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username))
             else:
-                self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s, from tag %s, scope %s with restoreAsUser %s and your username of %s. Message is %s" % (app, type, obj_name, tag, scope, restoreAsUser, username, message))
-                logger.warn("Restore has failed to complete successfully in app=%s, object of type=%s, with name=%s, from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s, message=%s" % (app, type, obj_name, tag, scope, restoreAsUser, username, message))
+                self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s, from tag %s, scope %s with restoreAsUser %s and your username of %s. Message is %s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))
+                logger.warn("Restore has failed to complete successfully in app=%s, object of type=%s, with name=%s, from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s, message=%s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))
 
             self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run', sslVerify=False)
 
@@ -279,12 +282,12 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 logger.warn("messages from query=\"%s\" were messages=\"%s\"" % (query, res["messages"]))
         return res
 
-    def runHttpRequest(self, url, headers, data, type, text, sslVerify=False):
-        if type == "delete":
+    def runHttpRequest(self, url, headers, data, obj_type, text, sslVerify=False):
+        if obj_type == "delete":
             res = requests.delete(url, headers=headers, verify=sslVerify)
-        elif type == "post":
+        elif obj_type == "post":
             res = requests.post(url, headers=headers, verify=sslVerify, data=data)
-        elif type == "get":
+        elif obj_type == "get":
             res = requests.get(url, headers=headers, verify=sslVerify)
 
         if (res.status_code != requests.codes.ok and res.status_code != 201):
