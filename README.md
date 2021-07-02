@@ -169,6 +169,8 @@ There are also many online resources to help with learning git
 - git_branch - optional, sets the git branch to use, defaults to master
 - git_proxy - optional, if supplied provides a proxy setting to use to access the git repository (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
 - file_per_ko - optional, do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this setting you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo
+- run_ko_query - optional, do you want to run a Splunk query to determine which knowledge objects changed? Uses macro `splunk_vc_ko_query` (defaults to false)
+- run_ko_diff - optional, should output of the modular input include diff information (requires `run_ko_query` to be true, defaults to false)
 
 "More settings"
 - interval - how often the backup should run, if not set the backup will only run on restart of the Splunk instance or when you save this configuration...
@@ -206,6 +208,19 @@ The following macros exist and are relate to the `splunkversioncontrol_restore_d
 - `splunk_vc_timeout` - this is the time delay between triggering the remote command and waiting for the `_audit` index to catchup with a log entry to advise the command was run, if set too short the restore may fail because the `| postversioncontrolrestore` search has not appeared in the `_audit` index yet
 - `sslVerify` - defaults to "False", this can be set to the location of a CA file to be used by the python requests library to validate the SSL certificates in use
 - `requestingAddress` - by default the REST endpoint splunkversioncontrol_rest_restore will make a HTTPS call back to the calling IP address, this overrides the address to call back, the default of False results in a call back to the requesting IP address which is used in most use cases 
+- `splunk_vc_ko_query`, should be configured to point to an appname:searchname, the default is `splunk_kom:splunk_vc_kom_audit_summary`
+
+## Configuring the macro & savedsearch to work with the run_ko_query option
+If `run_ko_query` is configured, then the app will attempt to trigger the savedsearch configured by the macro `splunk_vc_ko_query`
+The macro should be in the format appcontext:savedsearchname
+
+By default this is configured to `splunk_kom:splunk_vc_kom_audit_summary` and was tested against version 1.0.26 of the Knowledge Object Overview App for Splunk (kom) application (https://splunkbase.splunk.com/app/5399/)
+
+Note that the savedsearch `splunk_vc_kom_audit_summary` is included in the Splunk version control application but will need to be moved into the `splunk_kom` app context to work as expected, or you can make your own search if preferred.
+
+Since the output is from the modular input, the output will default to the sourctype `splunkversioncontrol_backup` and will appear in the main index (you can change this in more settings)
+
+Finally, the `run_ko_diff` option if configured in addition to the `run_ko_query` will run a git diff of HEAD~1 and include that in the output of the modular input (and will therefore be indexed into Splunk)
 
 ## Troubleshooting
 In some Linux OS distributions an error similar to `OPENSSL_1.0.0 not found` may appear, `os.unsetenv('LD_LIBRARY_PATH')` appears to fix this however AppInspect does not allow modification of OS environment variables.
@@ -274,6 +289,22 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes 
+### 1.2.2
+This version includes a few changes, these include two new parameters on the version control backup:
+`run_ko_query` - if enabled this runs a Splunk savedsearch and adds the additional information of tag=`git_tag_name` into the output of the modular input which is then indexed
+`run_ko_diff` - if enabled in combination with `run_ko_query` this additionally adds a diff=`git_difference_result` from comparing the new version with HEAD~1
+
+To run the query the macro `splunk_vc_ko_query`, should be configured to point to an appname:searchname, the default is `splunk_kom:splunk_vc_kom_audit_summary`
+If you have the Knowledge Object Overview App for Splunk (https://splunkbase.splunk.com/app/5399/) installed then there is a savedsearch called `splunk_vc_kom_audit_summary` which can be moved or copied into the `splunk_kom` app for this new functionality to work as expected
+
+In addition the field qualifiedSearch is now longer backed up for savedsearches
+
+Boolean tickboxes are now used for options that should be true or false
+
+Also attempted to improve the error logging for failed OS process execution
+
+Fixed a few misc bugs related to setting email address/name in the git repo among others
+
 ### 1.2.1
 This version includes some changes that should reduce the storage size of savedsearches, in particular:
 - listDefaultActionArgs=false is now used on the savedsearches REST endpoint

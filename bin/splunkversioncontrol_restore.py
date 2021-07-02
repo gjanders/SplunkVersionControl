@@ -55,7 +55,6 @@ SCHEME = """<scheme>
                 <description>Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)</description>
                 <required_on_create>false</required_on_create>
             </arg>
- 
             <arg name="auditLogsLookupBackTime">
                 <title>auditLogsLookupBackTime</title>
                 <description>This is how far back the audit logs will be checked to ensure that a restore entry is valid, this should be set to your interval time or slightly more, defaults to -1h (use Splunk format)</description>
@@ -66,12 +65,14 @@ SCHEME = """<scheme>
                 <description>turn on DEBUG level logging (defaults to INFO) (true/false), default false</description>
                 <validation>is_bool('debugMode')</validation>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
             </arg>
             <arg name="useLocalAuth">
                 <title>useLocalAuth</title>
                 <description>Instead of using the destUsername/destPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false), default false</description>
                 <validation>is_bool('useLocalAuth')</validation>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
             </arg>
             <arg name="remoteAppName">
                 <title>remoteAppName</title>
@@ -82,6 +83,8 @@ SCHEME = """<scheme>
                 <title>timewait</title>
                 <description>defaults to 600, if the kvstore contains an entry advising there is a restore running, how many seconds should pass before the entry is deleted and the restore happens anyway?</description>
                 <required_on_create>false</required_on_create>
+                <data_type>number</data_type>
+                <validation>is_pos_int('timewait')</validation>
             </arg>
             <arg name="git_command">
                 <title>git_command</title>
@@ -112,6 +115,8 @@ SCHEME = """<scheme>
                 <title>file_per_ko</title>
                 <description>Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app)</description>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('file_per_ko')</validation>
             </arg>
         </args>
     </endpoint>
@@ -165,19 +170,19 @@ def validate_arguments():
     
     if 'debugMode' in val_data:
         debugMode = val_data['debugMode'].lower()
-        if debugMode == "true" or debugMode == "t":
+        if debugMode == "true" or debugMode == "t" or debugMode == "1":
             logging.getLogger().setLevel(logging.DEBUG)
 
     useLocalAuth = False
     if 'useLocalAuth' in val_data:
         useLocalAuth = val_data['useLocalAuth'].lower()
-        if useLocalAuth == "true" or useLocalAuth == "t":
+        if useLocalAuth == "true" or useLocalAuth == "t" or useLocalAuth == "1":
             useLocalAuth = True
             logger.debug("useLocalAuth enabled")
             if val_data['destURL'] != "https://localhost:8089":
                 print_error("Expected destURL of https://localhost:8089 since useLocalAuth=True")
                 sys.exit(1)
-        elif useLocalAuth == "false" or useLocalAuth == "f":
+        elif useLocalAuth == "false" or useLocalAuth == "f" or useLocalAuth == "0":
             useLocalAuth = False
         else:
             print_error("useLocalAuth argument should be true or false, invalid config")
@@ -201,10 +206,10 @@ def validate_arguments():
 
     sslVerify = False
     if 'sslVerify' in val_data:
-        if val_data['sslVerify'].lower() == 'true':
+        if val_data['sslVerify'].lower() == 'true' or val_data['sslVerify'] == "1":
             sslVerify = True
             logger.debug('sslverify set to boolean True from: ' + val_data['sslVerify'])
-        elif val_data['sslVerify'].lower() == 'false':
+        elif val_data['sslVerify'].lower() == 'false' or val_data['sslVerify'] == "0":
             sslVerify = False
             logger.debug('sslverify set to boolean False from: ' + val_data['sslVerify'])
         else:
@@ -246,11 +251,13 @@ def validate_arguments():
 
     if 'git_command' in val_data:
         git_command = val_data['git_command'].strip()
+        git_command = git_command.replace("\\","/")
         logger.debug("Overriding git command to %s" % (git_command))
     else:
         git_command = "git"
     if 'ssh_command' in val_data:
         ssh_command = val_data['ssh_command'].strip()
+        ssh_command = ssh_command.replace("\\","/")
         logger.debug("Overriding ssh command to %s" % (ssh_command))
     else:
         ssh_command = "ssh"

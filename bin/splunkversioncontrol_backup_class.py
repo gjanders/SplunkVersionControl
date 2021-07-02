@@ -20,6 +20,7 @@ from splunkversioncontrol_utility import runOSProcess, get_password
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib import six
+from unidiff import PatchSet
 
 """
 
@@ -471,19 +472,27 @@ class SplunkVersionControlBackup:
         # At this point we have zero or more files that may have been deleted from splunk but exist on the filesystem
         logger.info("i=\"%s\" the following files were left after completing the backup at scope=%s for type=%s list=\"%s\"" % (self.stanzaName, scope, type, files))
         for a_file in files:
-            logger.info("i=\"%s\" removing file=\"%s\"" % (self.stanzaName, a_file))
+            logger.info("i=\"%s\" removing file=%s" % (self.stanzaName, a_file))
             os.remove(a_file)
             # some files were removed, delete empty directories too
             if len(files) > 0:
                 for a_dir in dirs:
                     if len(os.listdir(a_dir)) == 0:
-                        logger.info("i=\"%s\" removing empty dir=\"%s\"" % (self.stanzaName, a_dir))
+                        logger.info("i=\"%s\" removing empty dir=%s" % (self.stanzaName, a_dir))
 
     ###########################
     #
     # Shared function to write each individual file out
     #
     ###########################
+    def create_file_name(self, file):
+        file_name = six.moves.urllib.parse.quote_plus(file)
+        # if a file exceeds 255 characters it will result in a file too long error (e.g. really long field extraction names
+        if len(file_name) > 254:
+            hash = hashlib.md5(file.encode('utf-8')).hexdigest()
+            file_name = file_name[0:222] + hash
+        return file_name
+
     def write_files(self, dir, objects):
         if not os.path.isdir(dir):
             os.mkdir(dir)
@@ -493,21 +502,139 @@ class SplunkVersionControlBackup:
             an_object_dir = dir + "/" + an_object["owner"]
             if not os.path.isdir(an_object_dir):
                 os.mkdir(an_object_dir)
-            # if a file exceeds 255 characters it will result in a file too long error (e.g. really long field extraction names
-            file_name = six.moves.urllib.parse.quote_plus(an_object["name"])
-            if len(file_name) > 254:
-                hash = hashlib.md5(an_object["name"].encode('utf-8')).hexdigest()
-                file_name = file_name[0:222] + hash
+            file_name = self.create_file_name(an_object["name"])
             an_object_file = an_object_dir + "/" + file_name
             with open(an_object_file, 'w', encoding="utf-8") as f:
                 f.write(six.text_type(json.dumps(an_object, sort_keys=True, indent=0)))
                 # add newline so git doesn't think it's different every commit...
-                f.write("\n")
+                f.write(six.text_type("\n"))
             try:
                 files.remove(an_object_file)
             except:
                 pass
         return files, dirs
+
+    # obtain the macro contents for a specific macro
+    def obtain_svc_ko_query_context(self):
+        query = "/properties/macros/splunk_vc_ko_query?output_mode=json"
+        url = self.splunk_rest + "/servicesNS/nobody/" + self.appName + query
+
+        headers = {}
+        auth = None
+
+        if not self.srcUsername:
+            headers={'Authorization': 'Splunk %s' % self.session_key}
+        else:
+            auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
+
+        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+        if (res.status_code != requests.codes.ok):
+            logger.warn("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
+            return None
+
+        res = json.loads(res.text)
+
+        #Log return messages from Splunk, often these advise of an issue but not always...
+        if 'messages' in res and len(res["messages"]) > 0:
+            firstMessage = res["messages"][0]
+            if 'type' in firstMessage and firstMessage['type'] == "INFO":
+                #This is a harmless info message ,most other messages are likely an issue
+                logger.info("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
+            else:
+                logger.warn("i=\"%s\" messages from query=\"%s\" were messages=\"%s\"" % (self.stanzaName, query, res["messages"]))
+
+        if 'entry' in res:
+            entry = res['entry']
+            if len(entry) == 0:
+                logger.warn("i=\"%s\" unable to obtain macro information from query=\"%s\"" % (self.stanzaName, query))
+                return None
+            if 'content' in entry[0]:
+                return_res = entry[0]['content']
+                logger.debug("i=\"%s\" obtained macro information from query=\"%s\", result contained \"%s\"" % (self.stanzaName, query, return_res))
+                return return_res
+            else:
+                logger.warn("i=\"%s\" unable to obtain macro information from query=\"%s\", entry contained: %s" % (self.stanzaName, query, entry[0]))
+        else:
+            logger.warn("i=\"%s\" unable to obtain macro information from query=\"%s\", result contained: %s" % (self.stanzaName, query, res))
+
+        return None
+
+    # write the contents out from what we have found to have changed
+    def process_ko_query_contents(self, results, tag):
+        if not 'results' in results:
+            logger.warn("i=\"%s\" no results field found in returned results \"%s\" tag=%s" % (self.stanzaName, results, tag))
+            return
+
+        file_list, dir_list = self.list_dir_contents(self.gitTempDir)
+        str = ""
+        for a_result in results['results']:
+            for key in a_result:
+                if key == "scope":
+                    pass
+                str = '{}{}="{}" '.format(str,key,a_result[key])
+
+            overall_matches = []
+
+            if 'ko_type' in a_result and 'app_name' in a_result and 'scope' in a_result:
+                scope_list = a_result['scope'].split(",")
+                for a_scope in scope_list:
+                    file_str = self.gitTempDir + "/" + a_result['app_name'] + "/" + a_scope + "/" + a_result['ko_type']
+                    logger.debug("i=\"%s\" looking for file=%s tag=%s" % (self.stanzaName, file_str, tag))
+
+                    matches = [ entry for entry in file_list if entry.find(file_str) != -1 ]
+                    start = len(self.gitTempDir) + 1
+                    match = [ match[start:] for match in matches ]
+                    overall_matches = overall_matches + match
+                    logger.debug("i=\"%s\" overall_matches=\"%s\" tag=%s" % (self.stanzaName, overall_matches, tag))
+
+                    if self.file_per_ko:
+                        if not 'ko_name' in a_result:
+                            logger.info("i=\"%s\" ko_name is null, cannot identify an exact changed object \"%s\" tag=%s" % (self.stanzaName, a_result, tag))
+                            if 'user' in a_result:
+                                #TODO may not work on Windows
+                                find_str = "/" + a_result['user'] + "/"
+                                overall_matches_list = [ entry[0:entry.find(find_str)+len(find_str)] for entry in overall_matches if entry.find(find_str) != -1 ]
+                            else:
+                                find_str = a_result['ko_type']
+                                overall_matches_list = [ entry[0:entry.find(find_str)+len(find_str)] for entry in overall_matches if entry.find(find_str) != -1 ]
+                            overall_matches = list(set(overall_matches_list))
+                        else:
+                            file_name = self.create_file_name(a_result['ko_name'])
+                            logger.debug("i=\"%s\" looking for file_name=%s tag=%s" % (self.stanzaName, file_name, tag))
+                            match = []
+
+                            for entry in overall_matches:
+                                start = entry.find(file_name)
+                                if start != -1 and len(entry[start:]) == len(file_name):
+                                    match.append(entry)
+
+                            if len(match) > 0:
+                                overall_matches = match
+                            else:
+                                logger.warn("i=\"%s\" looking for file_name=%s in file_str=%s tag=%s but did not find a match" % (self.stanzaName, file_name, file_str, tag))
+            str = str + "tag=" + tag
+            first = True
+            for match in overall_matches:
+                if first:
+                    first = False
+                    str = str + " git_location=" + match
+                else:
+                    str = str + " OR git_location=" + match
+
+            if self.run_ko_diff:
+                diff_str = "cd {0}; {1} diff HEAD~1".format(self.gitTempDir, self.git_command)
+                output, stderrout, res = runOSProcess(diff_str, logger, timeout=300, shell=True)
+                if res == False:
+                    logger.error("i=\"%s\" Failure while running git diff HEAD~1, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
+                else:
+                    patch = PatchSet(output)
+                    for entry in patch:
+                        logger.debug("i=\"%s\" checking to see if path=%s exists in the overall_matches list" % (self.stanzaName, entry.path))
+                        if entry.path in overall_matches:
+                            str = "%s diff=%s" % (str, entry)
+            str = str + "\n"
+        print(str)
+        #logger.info(str)
 
     ###########################
     #
@@ -721,7 +848,7 @@ class SplunkVersionControlBackup:
     #
     ###########################
     def savedsearches(self, app):
-        ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time" ]
+        ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time", "qualifiedSearch" ]
 
         return self.runQueries(app, "/saved/searches", "savedsearches", ignoreList, extra_args="&listDefaultActionArgs=false")
 
@@ -863,10 +990,17 @@ class SplunkVersionControlBackup:
         return {x: d[x] for x in d if x not in keys}
 
     #Run a Splunk query via the search/jobs endpoint
-    def runSearchJob(self, query):
-        url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
-        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\", proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, query, len(self.proxies), self.sslVerify))
+    def runSearchJob(self, query, app_context=None, earliest=None, latest=None):
+        if not app_context:
+            app_context = self.appName
+        url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (app_context)
+        logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\", proxies_length=%s, sslVerify=%s, earliest=%s, latest=%s" % (self.stanzaName, url, self.srcUsername, query, len(self.proxies), self.sslVerify, earliest, latest))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot" }
+
+        if earliest:
+            data["earliest_time"] = earliest
+        if latest:
+            data["latest_time"] = latest
 
         #no srcUsername, use the session_key method
         headers = {}
@@ -905,19 +1039,34 @@ class SplunkVersionControlBackup:
             clone_str = "cd /d {0} & {1} clone {2}".format(self.gitRootDir, self.git_command, self.gitRepoURL)
             if len(self.git_proxies) > 0 and self.gitRepoHTTP:
                 clone_str = "set HTTPS_PROXY=" + self.git_proxies["https"] + " & " + clone_str
-            if 'git_name' in config:
-                clone_str = clone_str + " & {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
-            if 'git_email' in config:
-                clone_str = clone_str + " & {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
         else:
             clone_str = "cd {0}; {1} clone {2} 2>&1".format(self.gitRootDir, self.git_command, self.gitRepoURL)
             if len(self.git_proxies) > 0 and self.gitRepoHTTP:
                 clone_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + clone_str
-            if 'git_name' in config:
-                clone_str = clone_str + " ; {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
-            if 'git_email' in config:
-                clone_str = clone_str + " ; {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
         (output, stderrout, res) = runOSProcess(clone_str, logger, timeout=300, shell=True)
+        return (output, stderrout, res)
+
+    def set_git_details(self, config):
+        if self.windows:
+            if 'git_name' or 'git_email' in config:
+                set_str = "cd /d {0}".format(self.gitTempDir)
+                if 'git_name' in config:
+                    set_str = set_str + " & {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+                if 'git_email' in config:
+                    set_str = set_str + " & {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
+        else:
+            if 'git_name' or 'git_email' in config:
+                set_str = "cd {0}".format(self.gitTempDir)
+                if 'git_name' in config:
+                    set_str = set_str + " ; {0} config user.name \"".format(self.git_command) + config['git_name'] + "\""
+                if 'git_email' in config:
+                    set_str = set_str + " ; {0} config user.email \"".format(self.git_command) + config['git_email'] + "\""
+        if 'git_name' or 'git_email' in config:
+            (output, stderrout, res) = runOSProcess(set_str, logger, timeout=300, shell=True)
+        else:
+            output=""
+            stderrout=""
+            res=True
         return (output, stderrout, res)
 
     # run the git pull
@@ -1099,7 +1248,7 @@ class SplunkVersionControlBackup:
         #If we want debugMode, keep the debug logging, otherwise leave this at INFO level
         if 'debugMode' in config:
             debugMode = config['debugMode'].lower()
-            if debugMode == "true" or debugMode == "t":
+            if debugMode == "true" or debugMode == "t" or debugMode == "1":
                 logging.getLogger().setLevel(logging.DEBUG)
 
         #stanza_name without the splunkversioncontrol_backup://
@@ -1126,22 +1275,34 @@ class SplunkVersionControlBackup:
 
         if 'noPrivate' in config:
             self.noPrivate = config['noPrivate'].lower()
-            if self.noPrivate == "true" or self.noPrivate=="t":
+            if self.noPrivate == "true" or self.noPrivate=="t" or self.noPrivate == "1":
                 self.noPrivate = True
             else:
                 self.noPrivate = False
 
         if 'noDisabled' in config:
             self.noDisabled = config['noDisabled'].lower()
-            if self.noDisabled == "true" or self.noDisabled=="t":
+            if self.noDisabled == "true" or self.noDisabled=="t" or self.noDisabled == "1":
                 self.noDisabled = True
             else:
                 self.noDisabled = False
 
+        self.run_ko_query = False
+        if 'run_ko_query' in config:
+            run_ko_query = config['run_ko_query'].lower()
+            if run_ko_query == "true" or run_ko_query=="t" or run_ko_query == "1":
+                self.run_ko_query = True
+
+        self.run_ko_diff = False
+        if 'run_ko_diff' in config:
+            run_ko_diff = config['run_ko_diff'].lower()
+            if run_ko_diff == "true" or run_ko_diff=="t" or run_ko_diff == "1":
+                self.run_ko_diff = True
+
         useLocalAuth = False
         if 'useLocalAuth' in config:
             useLocalAuth = config['useLocalAuth'].lower()
-            if useLocalAuth == "true" or useLocalAuth=="t":
+            if useLocalAuth == "true" or useLocalAuth=="t" or useLocalAuth == "1":
                 useLocalAuth = True
                 logger.debug("useLocalAuth enabled")
             else:
@@ -1169,12 +1330,14 @@ class SplunkVersionControlBackup:
 
         if 'git_command' in config:
             self.git_command = config['git_command'].strip()
+            self.git_command = self.git_command.replace("\\","/")
             logger.debug("Overriding git command to %s" % (self.git_command))
         else:
             self.git_command = "git"
 
         if 'ssh_command' in config:
             self.ssh_command = config['ssh_command'].strip()
+            self.ssh_command = self.ssh_command.replace("\\","/")
             logger.debug("Overriding ssh command to %s" % (self.ssh_command))
         else:
             self.ssh_command = "ssh"
@@ -1215,10 +1378,10 @@ class SplunkVersionControlBackup:
         self.git_proxies = git_proxies
 
         if 'sslVerify' in config:
-            if config['sslVerify'].lower() == 'true':
+            if config['sslVerify'].lower() == 'true' or config['sslVerify'] == "1":
                 self.sslVerify = True
                 logger.debug('sslverify set to boolean True from: ' + config['sslVerify'])
-            elif config['sslVerify'].lower() == 'false':
+            elif config['sslVerify'].lower() == 'false' or config['sslVerify'] == "0":
                 self.sslVerify = False
                 logger.debug('sslverify set to boolean False from: ' + config['sslVerify'])
             else:
@@ -1227,10 +1390,10 @@ class SplunkVersionControlBackup:
 
         self.file_per_ko = False
         if 'file_per_ko' in config:
-            if config['file_per_ko'].lower() == 'true':
+            if config['file_per_ko'].lower() == 'true' or config['file_per_ko'] == "1":
                 self.file_per_ko = True
                 logger.debug('file_per_ko set to boolean True from: ' + config['file_per_ko'])
-            elif config['file_per_ko'].lower() == 'false':
+            elif config['file_per_ko'].lower() == 'false' or config['file_per_ko'] == "0":
                 logger.debug('file_per_ko set to boolean False from: ' + config['file_per_ko'])
             else:
                 logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"' % (self.stanzaName, config['file_per_ko']))
@@ -1311,6 +1474,10 @@ class SplunkVersionControlBackup:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
 
+            (output, stderrout, res) = self.set_git_details(config)
+            if res == False:
+                logger.error("i=\"%s\" git configuration failed for some reason output=\"%s\", stderrout=\"%s\"" % (self.stanzaName, output, stderrout))
+
         lastRunEpoch = None
         appsWithChanges = None
         #Version Control File to record when we last ran
@@ -1379,6 +1546,10 @@ class SplunkVersionControlBackup:
                 sys.exit(1)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+
+            (output2, stderrout2, res) = self.set_git_details(config)
+            if res == False:
+                logger.error("i=\"%s\" git configuration failed for some reason output=\"%s\", stderrout=\"%s\"" % (self.stanzaName, output2, stderrout2))
 
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
@@ -1515,6 +1686,10 @@ class SplunkVersionControlBackup:
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
 
+            (output2, stderrout2, res) = self.set_git_details(config)
+            if res == False:
+                logger.error("i=\"%s\" git configuration failed for some reason output=\"%s\", stderrout=\"%s\"" % (self.stanzaName, output2, stderrout2))
+
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
             gitFailure = True
@@ -1537,9 +1712,21 @@ class SplunkVersionControlBackup:
                 if len(self.git_proxies) > 0 and self.gitRepoHTTP:
                     push_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + push_str
                 (output, stderrout, res) = runOSProcess(push_str, logger, timeout=300, shell=True)
+                res=True
             if res == False:
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
-
+            else:
+                # we want to run a knowledge object query against Splunk to determine "what changed"
+                if self.run_ko_query:
+                    context = self.obtain_svc_ko_query_context()
+                    if context:
+                        context_list = context.split(":")
+                        app_context = context_list[0]
+                        query = context_list[1]
+                        res = self.runSearchJob("| savedsearch " + query, app_context, lastRunEpoch, currentEpochTime)
+                        self.process_ko_query_contents(res, todaysDate)
+                    else:
+                        logger.warn("i=\"%s\" unable to obtain the macro required to run the knowledge objects query" % (self.stanzaName))
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True

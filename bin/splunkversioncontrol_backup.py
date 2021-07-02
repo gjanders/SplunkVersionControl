@@ -58,12 +58,14 @@ SCHEME = """<scheme>
                 <description>disable the backup of user level / private objects (true/false), default false</description>
                 <validation>is_bool('noPrivate')</validation>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
             </arg>
             <arg name="noDisabled">
                 <title>noDisabled</title>
                 <description>disable the backup of objects with a disabled status in Splunk (true/false), default false</description>
                 <validation>is_bool('noDisabled')</validation>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
             </arg>
             <arg name="includeEntities">
                 <title>includeEntities</title>
@@ -90,12 +92,14 @@ SCHEME = """<scheme>
                 <description>turn on DEBUG level logging (defaults to INFO) (true/false), default false</description>
                 <validation>is_bool('debugMode')</validation>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
             </arg>
             <arg name="useLocalAuth">
                 <title>useLocalAuth</title>
                 <description>Instead of using the srcUsername/srcPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false), default false</description>
                 <validation>is_bool('useLocalAuth')</validation>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
             </arg>
             <arg name="remoteAppName">
                 <title>remoteAppName</title>
@@ -146,6 +150,22 @@ SCHEME = """<scheme>
                 <title>file_per_ko</title>
                 <description>Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app)</description>
                 <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('file_per_ko')</validation>
+            </arg>
+            <arg name="run_ko_query">
+                <title>run_ko_query</title>
+                <description>Do you want to run a Splunk query to determine which knowledge objects changed? macro 'splunk_vc_ko_query' (defaults to false)</description>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('run_ko_query')</validation>
+            </arg>
+            <arg name="run_ko_diff">
+                <title>run_ko_diff</title>
+                <description>Should output of the modular input include diff information (requires run_ko_query to be true, defaults to false)</description>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('run_ko_diff')</validation>
             </arg>
         </args>
     </endpoint>
@@ -194,7 +214,7 @@ def validate_arguments():
     
     if 'debugMode' in val_data:
         debugMode = val_data['debugMode'].lower()
-        if debugMode == "true" or debugMode == "t":
+        if debugMode == "true" or debugMode == "t" or debugMode == "1":
             logging.getLogger().setLevel(logging.DEBUG)
 
     session_key = val_data['session_key']
@@ -202,13 +222,13 @@ def validate_arguments():
     useLocalAuth = False
     if 'useLocalAuth' in val_data:
         useLocalAuth = val_data['useLocalAuth'].lower()
-        if useLocalAuth == "true" or useLocalAuth == "t":
+        if useLocalAuth == "true" or useLocalAuth == "t" or useLocalAuth == "1":
             useLocalAuth = True
             logger.debug("useLocalAuth enabled")
             if val_data['srcURL'] != "https://localhost:8089":
                 print_error("Expected srcURL of https://localhost:8089 since useLocalAuth=True")
                 sys.exit(1)
-        elif useLocalAuth == "false" or useLocalAuth == "f":
+        elif useLocalAuth == "false" or useLocalAuth == "f" or useLocalAuth == "0":
             useLocalAuth = False
         else:
             print_error("useLocalAuth argument should be true or false, invalid config")
@@ -225,21 +245,23 @@ def validate_arguments():
 
     if 'git_command' in val_data:
         git_command = val_data['git_command'].strip()
+        git_command = git_command.replace("\\","/")
         logger.debug("Overriding git command to %s" % (git_command))
     else:
         git_command = "git"
     if 'ssh_command' in val_data:
         ssh_command = val_data['ssh_command'].strip()
+        ssh_command = ssh_command.replace("\\","/")
         logger.debug("Overriding ssh command to %s" % (ssh_command))
     else:
         ssh_command = "ssh"
 
     sslVerify = False
     if 'sslVerify' in val_data:
-        if val_data['sslVerify'].lower() == 'true':
+        if val_data['sslVerify'].lower() == 'true' or val_data['sslVerify'] == "1":
             sslVerify = True
             logger.debug('sslverify set to boolean True from: ' + val_data['sslVerify'])
-        elif val_data['sslVerify'].lower() == 'false':
+        elif val_data['sslVerify'].lower() == 'false' or val_data['sslVerify'] == "0":
             sslVerify = False
             logger.debug('sslverify set to boolean False from: ' + val_data['sslVerify'])
         else:
@@ -301,14 +323,16 @@ def validate_arguments():
         else:
             proxy_command = "export " + proxy_command + " ; "
 
-    (stdout, stderr, res) = runOSProcess("%s %s ls-remote %s" % (proxy_command, git_command, gitRepoURL), logger)
+    (stdout, stderr, res) = runOSProcess("%s %s ls-remote %s" % (proxy_command, git_command, gitRepoURL), logger, shell=True)
     #If we didn't manage to ls-remote perhaps we just need to trust the fingerprint / this is the first run?
     if res == False and not gitRepoHTTP:
+        logger.error("Possible first run trying again" % (stdout, stderr))
         (stdout, stderrout, res) = runOSProcess(ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
         (stdout, stderr, res) = runOSProcess("%s ls-remote %s" % (git_command, gitRepoURL), logger)
 
     if res == False:
         print_error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))
+        logger.error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))
         sys.exit(6)
 
 

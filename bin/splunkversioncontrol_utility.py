@@ -4,14 +4,27 @@ import platform
 import json
 import requests
 import os
+import sys
+import traceback
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
+
+from splunklib import six
+
 
 #Based on https://stackoverflow.com/questions/1191374/using-module-subprocess-with-timeout
-def runOSProcess(command, logger, timeout=60, shell=False):
+def runOSProcess(command, logger, timeout=60, shell=True):
     logger.debug("Begin OS process run of %s" % (command))
     # if this is Linux use the shell
-    if platform.system() != "Windows":
-        shell = True
-    proc = Popen(command, stdout=PIPE, stderr=PIPE, shell=shell)
+    #if platform.system() != "Windows":
+    #    shell = True
+    try:
+        proc = Popen(command, stdout=PIPE, stderr=PIPE, shell=shell)
+    except:
+        stderr = traceback.format_exc()
+        stdout = ""
+        res=False
+        logger.error(stderr)
+        return six.ensure_str(stdout), six.ensure_str(stderr), res
 
     timer = Timer(timeout, proc.kill)
     try:
@@ -33,7 +46,7 @@ def runOSProcess(command, logger, timeout=60, shell=False):
             logger.debug("OS process exited with zero code, for command %s" % (command))
             res = True
 
-    return str(stdout), str(stderr), res
+    return six.ensure_str(stdout), six.ensure_str(stderr), res
 
 # use the password endpoint to obtain the clear_password passed in, start with the context of this app and then try all contexts
 def get_password(password, session_key, logger, sslVerify=False):
