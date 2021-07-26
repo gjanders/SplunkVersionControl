@@ -118,6 +118,13 @@ SCHEME = """<scheme>
                 <data_type>boolean</data_type>
                 <validation>is_bool('file_per_ko')</validation>
             </arg>
+            <arg name="disable_git_ssl_verify">
+                <title>disable_git_ssl_verify</title>
+                <description>Use GIT_SSL_NO_VERIFY=true on all git commands</description>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('disable_git_ssl_verify')</validation>
+            </arg>
         </args>
     </endpoint>
 </scheme>
@@ -261,6 +268,17 @@ def validate_arguments():
         logger.debug("Overriding ssh command to %s" % (ssh_command))
     else:
         ssh_command = "ssh"
+
+    disable_git_ssl_verify = False
+    if 'disable_git_ssl_verify' in val_data:
+        if val_data['disable_git_ssl_verify'].lower() == 'true' or val_data['disable_git_ssl_verify'] == "1":
+            git_command = "GIT_SSL_NO_VERIFY=true " + git_command
+            logger.debug('git_command now has GIT_SSL_NO_VERIFY=true because disable_git_ssl_verify: ' + val_data['disable_git_ssl_verify'])
+            disable_git_ssl_verify = True
+        elif val_data['disable_git_ssl_verify'].lower() == 'false' or val_data['disable_git_ssl_verify'] == "0":
+            logger.debug('disable_git_ssl_verify set to boolean False from: ' + val_data['disable_git_ssl_verify'])
+        else:
+            logger.warn('disable_git_ssl_verify not set to a valid value, ignoring the setting, please update the setting from: ' + val_data['disable_git_ssl_verify'])
 
     git_proxies = {}
     if 'git_proxy' in val_data:

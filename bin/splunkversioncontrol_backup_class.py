@@ -1335,6 +1335,15 @@ class SplunkVersionControlBackup:
         else:
             self.git_command = "git"
 
+        if 'disable_git_ssl_verify' in config:
+            if config['disable_git_ssl_verify'].lower() == 'true' or config['disable_git_ssl_verify'].lower() == 't' or config['disable_git_ssl_verify'] == "1":
+                self.git_command = "GIT_SSL_NO_VERIFY=true " + self.git_command
+                logger.debug('git_command now has GIT_SSL_NO_VERIFY=true because disable_git_ssl_verify: ' + config['disable_git_ssl_verify'])
+            elif config['disable_git_ssl_verify'].lower() == 'false' or config['disable_git_ssl_verify'] == "0":
+                logger.debug('disable_git_ssl_verify set to boolean False from: ' + config['disable_git_ssl_verify'])
+            else:
+                logger.warn('disable_git_ssl_verify not set to a valid value, ignoring the setting, please update the setting from: ' + config['disable_git_ssl_verify'])
+
         if 'ssh_command' in config:
             self.ssh_command = config['ssh_command'].strip()
             self.ssh_command = self.ssh_command.replace("\\","/")
@@ -1353,6 +1362,8 @@ class SplunkVersionControlBackup:
         else:
             self.git_branch = "master"
 
+        self.session_key = config['session_key']
+
         proxies = {}
         if 'proxy' in config:
             proxies['https'] = config['proxy']
@@ -1360,7 +1371,7 @@ class SplunkVersionControlBackup:
                 start = proxies['https'].find("password:") + 9
                 end = proxies['https'].find("@")
                 logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
-                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(proxies['https'][start:end], self.session_key, logger)
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         self.proxies = proxies
@@ -1372,7 +1383,7 @@ class SplunkVersionControlBackup:
                 start = git_proxies['https'].find("password:") + 9
                 end = git_proxies['https'].find("@")
                 logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
-                temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger)
                 git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
         self.git_proxies = git_proxies
@@ -1407,7 +1418,6 @@ class SplunkVersionControlBackup:
         #Use current epoch to output a checkpoint file at the end
         #If we have not run before just backup everything
         currentEpochTime = calendar.timegm(time.gmtime())
-        self.session_key = config['session_key']
 
         headers={'Authorization': 'Splunk %s' % config['session_key']}
 
