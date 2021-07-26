@@ -288,7 +288,12 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
-## Release Notes 
+## Release Notes
+### 1.2.3
+New option disable_git_ssl_verify
+
+Bugfix for proxy code to work with git & HTTP proxies
+ 
 ### 1.2.2
 This version includes a few changes, these include two new parameters on the version control backup:
 `run_ko_query` - if enabled this runs a Splunk savedsearch and adds the additional information of tag=`git_tag_name` into the output of the modular input which is then indexed

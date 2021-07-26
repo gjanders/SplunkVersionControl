@@ -1119,7 +1119,7 @@ class SplunkVersionControlRestore:
                 logging.getLogger().setLevel(logging.DEBUG)
             elif isinstance(debugMode, bool) and not debugMode:
                 pass
-            elif debugMode.lower() == "true" or debugMode.lower() == "t" or debugMode.lower() == "1":
+            elif debugMode.lower() == "true" or debugMode.lower() == "t" or debugMode == "1":
                 logging.getLogger().setLevel(logging.DEBUG)
 
         self.stanzaName = config["name"].replace("splunkversioncontrol_restore://", "")
@@ -1130,7 +1130,7 @@ class SplunkVersionControlRestore:
                 useLocalAuth = True
             elif isinstance(useLocalAuth, bool) and not useLocalAuth:
                 useLocalAuth = False
-            elif useLocalAuth == "true" or useLocalAuth=="t" or useLocalAuth == "1":
+            elif useLocalAuth.lower() == "true" or useLocalAuth.lower()=="t" or useLocalAuth == "1":
                 useLocalAuth = True
             else:
                 useLocalAuth = False
@@ -1181,6 +1181,21 @@ class SplunkVersionControlRestore:
         else:
             self.git_command = "git"
 
+        if 'disable_git_ssl_verify' in config:
+            disable_git_ssl_verify = config['disable_git_ssl_verify']
+            if isinstance(disable_git_ssl_verify, bool) and disable_git_ssl_verify:
+                disable_git_ssl_verify_bool = True
+            elif isinstance(disable_git_ssl_verify, bool) and not disable_git_ssl_verify:
+                disable_git_ssl_verify_bool = False
+            elif disable_git_ssl_verify.lower() == "true" or disable_git_ssl_verify.lower()=="t" or disable_git_ssl_verify == "1":
+                disable_git_ssl_verify_bool = True
+            else:
+                disable_git_ssl_verify_bool = False
+
+            if disable_git_ssl_verify_bool:
+                self.git_command = "GIT_SSL_NO_VERIFY=true " + self.git_command
+                logger.debug('git_command now has GIT_SSL_NO_VERIFY=true because disable_git_ssl_verify: ' + config['disable_git_ssl_verify'])
+
         if 'ssh_command' in config:
             self.ssh_command = config['ssh_command'].strip()
             self.ssh_command = self.ssh_command.replace("\\","/")
@@ -1208,7 +1223,7 @@ class SplunkVersionControlRestore:
                 start = proxies['https'].find("password:") + 9
                 end = proxies['https'].find("@")
                 logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
-                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(proxies['https'][start:end], self.session_key, logger)
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         self.proxies = proxies
@@ -1220,7 +1235,7 @@ class SplunkVersionControlRestore:
                 start = git_proxies['https'].find("password:") + 9
                 end = git_proxies['https'].find("@")
                 logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
-                temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger)
                 git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
         self.git_proxies = git_proxies
