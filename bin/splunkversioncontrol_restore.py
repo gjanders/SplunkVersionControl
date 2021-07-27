@@ -48,7 +48,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="gitRepoURL">
                 <title>gitRepoURL</title>
-                <description>git repository URL to store the objects</description>
+                <description>git repository URL to store the objects. password:passwordinpasswordsconf can be used for token/password substitution if required for http/https URL's</description>
             </arg>
             <arg name="sslVerify">
                 <title>sslVerify</title>
@@ -117,6 +117,13 @@ SCHEME = """<scheme>
                 <required_on_create>false</required_on_create>
                 <data_type>boolean</data_type>
                 <validation>is_bool('file_per_ko')</validation>
+            </arg>
+            <arg name="disable_git_ssl_verify">
+                <title>disable_git_ssl_verify</title>
+                <description>Use GIT_SSL_NO_VERIFY=true on all git commands</description>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('disable_git_ssl_verify')</validation>
             </arg>
         </args>
     </endpoint>
@@ -262,6 +269,17 @@ def validate_arguments():
     else:
         ssh_command = "ssh"
 
+    disable_git_ssl_verify = False
+    if 'disable_git_ssl_verify' in val_data:
+        if val_data['disable_git_ssl_verify'].lower() == 'true' or val_data['disable_git_ssl_verify'] == "1":
+            git_command = "GIT_SSL_NO_VERIFY=true " + git_command
+            logger.debug('git_command now has GIT_SSL_NO_VERIFY=true because disable_git_ssl_verify: ' + val_data['disable_git_ssl_verify'])
+            disable_git_ssl_verify = True
+        elif val_data['disable_git_ssl_verify'].lower() == 'false' or val_data['disable_git_ssl_verify'] == "0":
+            logger.debug('disable_git_ssl_verify set to boolean False from: ' + val_data['disable_git_ssl_verify'])
+        else:
+            logger.warn('disable_git_ssl_verify not set to a valid value, ignoring the setting, please update the setting from: ' + val_data['disable_git_ssl_verify'])
+
     git_proxies = {}
     if 'git_proxy' in val_data:
         git_proxies["https"] = val_data['git_proxy']
@@ -274,6 +292,12 @@ def validate_arguments():
 
     if gitRepoURL.find("http") == 0:
         gitRepoHTTP = True
+        if gitRepoURL.find("password:") != -1:
+            start = gitRepoURL.find("password:") + 9
+            end = gitRepoURL.find("@")
+            logger.debug("Attempting to replace gitRepoURL=%s by subsituting=%s with a password" % (gitRepoURL, gitRepoURL[start:end]))
+            temp_password = get_password(gitRepoURL[start:end], session_key, logger)
+            gitRepoURL = gitRepoURL[0:start-9] + temp_password + gitRepoURL[end:]
     else:
         gitRepoHTTP = False
 

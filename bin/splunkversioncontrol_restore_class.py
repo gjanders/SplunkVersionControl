@@ -1114,12 +1114,11 @@ class SplunkVersionControlRestore:
         #If we want debugMode, keep the debug logging, otherwise drop back to INFO level
         if 'debugMode' in config:
             debugMode = config['debugMode']
-            logger.info(isinstance(debugMode, bool))
             if isinstance(debugMode, bool) and debugMode:
                 logging.getLogger().setLevel(logging.DEBUG)
             elif isinstance(debugMode, bool) and not debugMode:
                 pass
-            elif debugMode.lower() == "true" or debugMode.lower() == "t" or debugMode.lower() == "1":
+            elif debugMode.lower() == "true" or debugMode.lower() == "t" or debugMode == "1":
                 logging.getLogger().setLevel(logging.DEBUG)
 
         self.stanzaName = config["name"].replace("splunkversioncontrol_restore://", "")
@@ -1130,7 +1129,7 @@ class SplunkVersionControlRestore:
                 useLocalAuth = True
             elif isinstance(useLocalAuth, bool) and not useLocalAuth:
                 useLocalAuth = False
-            elif useLocalAuth == "true" or useLocalAuth=="t" or useLocalAuth == "1":
+            elif useLocalAuth.lower() == "true" or useLocalAuth.lower()=="t" or useLocalAuth == "1":
                 useLocalAuth = True
             else:
                 useLocalAuth = False
@@ -1153,19 +1152,29 @@ class SplunkVersionControlRestore:
 
         self.gitRepoURL = config['gitRepoURL']
 
+        self.session_key = config['session_key']
+
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
             self.gitRepoHTTP = True
+            if self.gitRepoURL.find("password:") != -1:
+                self.gitRepoURL_logsafe = self.gitRepoURL
+                start = self.gitRepoURL.find("password:") + 9
+                end = self.gitRepoURL.find("@")
+                logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
+                temp_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.gitRepoURL = self.gitRepoURL[0:start-9] + temp_password + self.gitRepoURL[end:]
+            else:
+                self.gitRepoURL_logsafe = self.gitRepoURL
         else:
             self.gitRepoHTTP = False
+            self.gitRepoURL_logsafe = self.gitRepoURL
 
         #From server
         self.splunk_rest = config['destURL']
         excludedList = [ "destPassword", "session_key" ]
         cleanArgs = self.without_keys(config, excludedList)
         logger.info("i=\"%s\" Splunk Version Control Restore run with arguments=\"%s\"" % (self.stanzaName, cleanArgs))
-
-        self.session_key = config['session_key']
 
         if not useLocalAuth and self.destPassword.find("password:") == 0:
             self.destPassword = get_password(self.destPassword[9:], self.session_key, logger)
@@ -1180,6 +1189,21 @@ class SplunkVersionControlRestore:
             logger.debug("Overriding git command to %s" % (self.git_command))
         else:
             self.git_command = "git"
+
+        if 'disable_git_ssl_verify' in config:
+            disable_git_ssl_verify = config['disable_git_ssl_verify']
+            if isinstance(disable_git_ssl_verify, bool) and disable_git_ssl_verify:
+                disable_git_ssl_verify_bool = True
+            elif isinstance(disable_git_ssl_verify, bool) and not disable_git_ssl_verify:
+                disable_git_ssl_verify_bool = False
+            elif disable_git_ssl_verify.lower() == "true" or disable_git_ssl_verify.lower()=="t" or disable_git_ssl_verify == "1":
+                disable_git_ssl_verify_bool = True
+            else:
+                disable_git_ssl_verify_bool = False
+
+            if disable_git_ssl_verify_bool:
+                self.git_command = "GIT_SSL_NO_VERIFY=true " + self.git_command
+                logger.debug('git_command now has GIT_SSL_NO_VERIFY=true because disable_git_ssl_verify: %s' % (disable_git_ssl_verify))
 
         if 'ssh_command' in config:
             self.ssh_command = config['ssh_command'].strip()
@@ -1208,7 +1232,7 @@ class SplunkVersionControlRestore:
                 start = proxies['https'].find("password:") + 9
                 end = proxies['https'].find("@")
                 logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
-                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(proxies['https'][start:end], self.session_key, logger)
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         self.proxies = proxies
@@ -1220,7 +1244,7 @@ class SplunkVersionControlRestore:
                 start = git_proxies['https'].find("password:") + 9
                 end = git_proxies['https'].find("@")
                 logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
-                temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger)
                 git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
         self.git_proxies = git_proxies
@@ -1233,15 +1257,15 @@ class SplunkVersionControlRestore:
             elif isinstance(sslVerify, bool) and not sslVerify:
                 self.sslVerify = False
                 logger.debug('sslverify set to boolean True from: %s' % (sslVerify))
-            elif config['sslVerify'].lower() == 'true' or config['sslVerify'] == "1":
+            elif sslVerify.lower() == 'true' or sslVerify == "1":
                 self.sslVerify = True
-                logger.debug('sslverify set to boolean True from: ' + config['sslVerify'])
-            elif config['sslVerify'].lower() == 'false' or config['sslVerify'] == "0":
+                logger.debug('sslverify set to boolean True from: ' + sslVerify)
+            elif sslVerify.lower() == 'false' or sslVerify == "0":
                 self.sslVerify = False
-                logger.debug('sslverify set to boolean False from: ' + config['sslVerify'])
+                logger.debug('sslverify set to boolean False from: ' + sslVerify)
             else:
-                self.sslVerify = config['sslVerify']
-                logger.debug('sslverify set to: %s' % (config['sslVerify']))
+                self.sslVerify = sslVerify
+                logger.debug('sslverify set to: %s' % (sslVerify))
 
         self.file_per_ko = False
         if 'file_per_ko' in config:
@@ -1252,10 +1276,10 @@ class SplunkVersionControlRestore:
             elif isinstance(file_per_ko, bool) and not file_per_ko:
                 self.file_per_ko = False
                 logger.debug('file_per_ko set to boolean False from: %s' % (file_per_ko))
-            elif config['file_per_ko'].lower() == 'true' or config['file_per_ko'] == "1":
+            elif file_per_ko.lower() == 'true' or file_per_ko == "1":
                 self.file_per_ko = True
                 logger.debug('file_per_ko set to boolean True from: %s' % (file_per_ko))
-            elif config['file_per_ko'].lower() == 'false' or config['file_per_ko'] == "0":
+            elif file_per_ko.lower() == 'false' or file_per_ko == "0":
                 logger.debug('file_per_ko set to boolean False from: %s' % (file_per_ko))
             else:
                 logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"') % (self.stanzaName, config['file_per_ko'])
@@ -1280,11 +1304,11 @@ class SplunkVersionControlRestore:
             #Clone the remote git repo
             (output, stderrout, res) = self.clone_git_dir()
             if res == False:
-                logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
                 logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
-                logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+                logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
                 if not ".git" in os.listdir(self.gitTempDir):
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
@@ -1309,18 +1333,18 @@ class SplunkVersionControlRestore:
             #Do a git pull to ensure we are up-to-date
             (output, stderrout, res) = self.git_pull(self.git_branch, pull=True)
             if res == False:
-                logger.warn("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                logger.warn("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 shutil.rmtree(self.gitTempDir)
                 #Clone the remote git repo
                 (output, stderrout, res) = self.clone_git_dir()
                 if res == False:
-                    logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                    logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                     sys.exit(1)
                 else:
                     logger.debug("i=\"%s\" result from git command: %s, output '%s' with stderroutput of '%s'" % (self.stanzaName, res, output, stderrout))
-                    logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitRootDir))
+                    logger.info("i=\"%s\" Successfully cloned the git URL=%s into directory dir=%s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitRootDir))
             else:
-                logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitRootDir))
+                logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitRootDir))
 
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
@@ -1430,7 +1454,7 @@ class SplunkVersionControlRestore:
                 if res == False:
                     logger.error("i=\"%s\" user=%s, object name=%s, type=%s, time=%s, git checkout of tag=%s failed in directory dir=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, user, name, obj_type, time, tag, self.gitTempDir, output, stderrout))
                 else:
-                    logger.info("i=\"%s\" Successfully ran the git checkout for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+                    logger.info("i=\"%s\" Successfully ran the git checkout for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
                 
                 if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1: 
                     logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))

@@ -1322,11 +1322,23 @@ class SplunkVersionControlBackup:
 
         self.gitRepoURL = config['gitRepoURL']
 
+        self.session_key = config['session_key']
+
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
             self.gitRepoHTTP = True
+            if self.gitRepoURL.find("password:") != -1:
+                self.gitRepoURL_logsafe = self.gitRepoURL
+                start = self.gitRepoURL.find("password:") + 9
+                end = self.gitRepoURL.find("@")
+                logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
+                temp_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.gitRepoURL = self.gitRepoURL[0:start-9] + temp_password + self.gitRepoURL[end:]
+            else:
+                self.gitRepoURL_logsafe = self.gitRepoURL
         else:
             self.gitRepoHTTP = False
+            self.gitRepoURL_logsafe = self.gitRepoURL
 
         if 'git_command' in config:
             self.git_command = config['git_command'].strip()
@@ -1334,6 +1346,15 @@ class SplunkVersionControlBackup:
             logger.debug("Overriding git command to %s" % (self.git_command))
         else:
             self.git_command = "git"
+
+        if 'disable_git_ssl_verify' in config:
+            if config['disable_git_ssl_verify'].lower() == 'true' or config['disable_git_ssl_verify'].lower() == 't' or config['disable_git_ssl_verify'] == "1":
+                self.git_command = "GIT_SSL_NO_VERIFY=true " + self.git_command
+                logger.debug('git_command now has GIT_SSL_NO_VERIFY=true because disable_git_ssl_verify: ' + config['disable_git_ssl_verify'])
+            elif config['disable_git_ssl_verify'].lower() == 'false' or config['disable_git_ssl_verify'] == "0":
+                logger.debug('disable_git_ssl_verify set to boolean False from: ' + config['disable_git_ssl_verify'])
+            else:
+                logger.warn('disable_git_ssl_verify not set to a valid value, ignoring the setting, please update the setting from: ' + config['disable_git_ssl_verify'])
 
         if 'ssh_command' in config:
             self.ssh_command = config['ssh_command'].strip()
@@ -1360,7 +1381,7 @@ class SplunkVersionControlBackup:
                 start = proxies['https'].find("password:") + 9
                 end = proxies['https'].find("@")
                 logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
-                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(proxies['https'][start:end], self.session_key, logger)
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         self.proxies = proxies
@@ -1372,7 +1393,7 @@ class SplunkVersionControlBackup:
                 start = git_proxies['https'].find("password:") + 9
                 end = git_proxies['https'].find("@")
                 logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
-                temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger)
                 git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
         self.git_proxies = git_proxies
@@ -1407,7 +1428,6 @@ class SplunkVersionControlBackup:
         #Use current epoch to output a checkpoint file at the end
         #If we have not run before just backup everything
         currentEpochTime = calendar.timegm(time.gmtime())
-        self.session_key = config['session_key']
 
         headers={'Authorization': 'Splunk %s' % config['session_key']}
 
@@ -1461,10 +1481,10 @@ class SplunkVersionControlBackup:
 
             (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
-                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
-                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
                 if not ".git" in os.listdir(self.gitTempDir):
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
@@ -1542,10 +1562,10 @@ class SplunkVersionControlBackup:
 
             (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
-                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
-                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
 
             (output2, stderrout2, res) = self.set_git_details(config)
             if res == False:
@@ -1681,10 +1701,10 @@ class SplunkVersionControlBackup:
 
             (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
-                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL, output, stderrout))
+                logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
-                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL, self.gitTempDir))
+                logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
 
             (output2, stderrout2, res) = self.set_git_details(config)
             if res == False:
