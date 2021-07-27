@@ -48,7 +48,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="gitRepoURL">
                 <title>gitRepoURL</title>
-                <description>git repository URL to store the objects</description>
+                <description>git repository URL to store the objects. password:passwordinpasswordsconf can be used for token/password substitution if required for http/https URL's</description>
             </arg>
             <arg name="sslVerify">
                 <title>sslVerify</title>
@@ -292,6 +292,12 @@ def validate_arguments():
 
     if gitRepoURL.find("http") == 0:
         gitRepoHTTP = True
+        if gitRepoURL.find("password:") != -1:
+            start = gitRepoURL.find("password:") + 9
+            end = gitRepoURL.find("@")
+            logger.debug("Attempting to replace gitRepoURL=%s by subsituting=%s with a password" % (gitRepoURL, gitRepoURL[start:end]))
+            temp_password = get_password(gitRepoURL[start:end], session_key, logger)
+            gitRepoURL = gitRepoURL[0:start-9] + temp_password + gitRepoURL[end:]
     else:
         gitRepoHTTP = False
 

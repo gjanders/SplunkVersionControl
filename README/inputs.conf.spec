@@ -8,7 +8,7 @@ srcPassword = <value>
 gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
-* git repository URL to store the objects
+* git repository URL to store the objects. password:passwordinpasswordsconf can be used for token/password substitution if required for http/https URL's
 sslVerify = <boolean>
 * Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
 noPrivate = <boolean>
@@ -64,7 +64,7 @@ destPassword = <value>
 gitTempDir = <value>
 * location where to store the output of the script on the filesystem (note this directory will be deleted/re-created but the parent dir must exist)
 gitRepoURL = <value>
-* git repository URL to restore the objects from
+* git repository URL to restore the objects from. password:passwordinpasswordsconf can be used for token/password substitution if required for http/https URL's
 sslVerify = <boolean>
 * Set to 'true' or 'false' to enable/disable SSL verification for REST requests to `srcUrl`. Set to a path to specify a file with valid CA. (https://2.python-requests.org/en/master/user/advanced/#ssl-cert-verification)
 auditLogsLookupBackTime = <value>

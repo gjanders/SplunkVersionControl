@@ -1153,9 +1153,17 @@ class SplunkVersionControlRestore:
 
         self.gitRepoURL = config['gitRepoURL']
 
+        self.session_key = config['session_key']
+
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
             self.gitRepoHTTP = True
+            if self.gitRepoURL.find("password:") != -1:
+                start = self.gitRepoURL.find("password:") + 9
+                end = self.gitRepoURL.find("@")
+                logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
+                temp_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.gitRepoURL = self.gitRepoURL[0:start-9] + temp_password + self.gitRepoURL[end:]
         else:
             self.gitRepoHTTP = False
 
@@ -1164,8 +1172,6 @@ class SplunkVersionControlRestore:
         excludedList = [ "destPassword", "session_key" ]
         cleanArgs = self.without_keys(config, excludedList)
         logger.info("i=\"%s\" Splunk Version Control Restore run with arguments=\"%s\"" % (self.stanzaName, cleanArgs))
-
-        self.session_key = config['session_key']
 
         if not useLocalAuth and self.destPassword.find("password:") == 0:
             self.destPassword = get_password(self.destPassword[9:], self.session_key, logger)

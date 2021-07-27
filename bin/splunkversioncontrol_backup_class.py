@@ -1322,9 +1322,17 @@ class SplunkVersionControlBackup:
 
         self.gitRepoURL = config['gitRepoURL']
 
+        self.session_key = config['session_key']
+
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
             self.gitRepoHTTP = True
+            if self.gitRepoURL.find("password:") != -1:
+                start = self.gitRepoURL.find("password:") + 9
+                end = self.gitRepoURL.find("@")
+                logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
+                temp_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.gitRepoURL = self.gitRepoURL[0:start-9] + temp_password + self.gitRepoURL[end:]
         else:
             self.gitRepoHTTP = False
 
@@ -1361,8 +1369,6 @@ class SplunkVersionControlBackup:
             logger.debug("Overriding git branch to %s" % (self.git_branch))
         else:
             self.git_branch = "master"
-
-        self.session_key = config['session_key']
 
         proxies = {}
         if 'proxy' in config:
