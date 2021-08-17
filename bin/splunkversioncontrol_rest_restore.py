@@ -144,7 +144,11 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         sslVerify = False
         if 'sslVerify' in json_dict:
             sslVerifyValue = json_dict['sslVerify']
-            if sslVerifyValue.lower() == 'true' or sslVerifyValue == "1":
+            if isinstance(sslVerifyValue, bool) and sslVerifyValue:
+                useLocalAuth = True
+            elif isinstance(sslVerifyValue, bool) and not sslVerifyValue:
+                pass
+            elif sslVerifyValue.lower() == 'true' or sslVerifyValue == "1":
                 sslVerify = True
                 logger.debug('sslverify set to boolean True from: ' + sslVerifyValue)
             elif sslVerifyValue.lower() == 'false' or sslVerifyValue == "0":

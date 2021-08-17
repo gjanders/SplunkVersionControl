@@ -17,7 +17,7 @@ from splunkversioncontrol_utility import runOSProcess, get_password
    In general this will be running against the localhost unless it is been tested as the lookup file will be updated
    by a user accessible dashboard
    Basic validation will be done to ensure someone without the required access cannot restore someone else's knowledge objects
- 
+
 """
 
 #Define the scheme for the inputs page to use
@@ -64,6 +64,13 @@ SCHEME = """<scheme>
                 <title>debugMode</title>
                 <description>turn on DEBUG level logging (defaults to INFO) (true/false), default false</description>
                 <validation>is_bool('debugMode')</validation>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+            </arg>
+            <arg name="show_passwords">
+                <title>show_passwords</title>
+                <description>Show passwords in the DEBUG/ERROR logs (hidden by default)</description>
+                <validation>is_bool('show_passwords')</validation>
                 <required_on_create>false</required_on_create>
                 <data_type>boolean</data_type>
             </arg>
@@ -166,7 +173,7 @@ def get_validation_data():
 def print_error(s):
     print("<error><message>%s</message></error>" % xml.sax.saxutils.escape(s))
     logger.error(s)
-    
+
 #Run an OS process with a timeout, this way if a command gets "stuck" waiting for input it is killed
 #    logger.warn("OS timeout after %s seconds while running %s" % (timeout, command))
 #    return "", "timeout after %s seconds" % (timeout), False
@@ -174,7 +181,7 @@ def print_error(s):
 #Validate the arguments to the app to ensure this will work...
 def validate_arguments():
     val_data = get_validation_data()
-    
+
     if 'debugMode' in val_data:
         debugMode = val_data['debugMode'].lower()
         if debugMode == "true" or debugMode == "t" or debugMode == "1":
@@ -194,12 +201,12 @@ def validate_arguments():
         else:
             print_error("useLocalAuth argument should be true or false, invalid config")
             sys.exit(1)
-    
+
     #If we're not using the useLocalAuth we must have a username/password to work with
     if not useLocalAuth and ('destUsername' not in val_data or 'destPassword' not in val_data):
         print_error("useLocalAuth is not set to true and destUsername/destPassword not set, invalid config")
         sys.exit(1)
-    
+
     appName = "SplunkVersionControl"
     if 'remoteAppName' in val_data:
         appName = val_data['remoteAppName']
@@ -290,16 +297,23 @@ def validate_arguments():
             temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
             git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
+    git_password = False
     if gitRepoURL.find("http") == 0:
         gitRepoHTTP = True
         if gitRepoURL.find("password:") != -1:
             start = gitRepoURL.find("password:") + 9
             end = gitRepoURL.find("@")
             logger.debug("Attempting to replace gitRepoURL=%s by subsituting=%s with a password" % (gitRepoURL, gitRepoURL[start:end]))
-            temp_password = get_password(gitRepoURL[start:end], session_key, logger)
-            gitRepoURL = gitRepoURL[0:start-9] + temp_password + gitRepoURL[end:]
+            git_password = get_password(gitRepoURL[start:end], session_key, logger)
+            gitRepoURL = gitRepoURL[0:start-9] + git_password + gitRepoURL[end:]
     else:
         gitRepoHTTP = False
+
+    show_passwords = False
+    if 'show_passwords' in val_data:
+        if val_data['show_passwords'].lower() == 'true' or val_data['show_passwords'] == "1":
+            show_passwords = True
+            logger.debug('show_passwords is now true due to show_passwords: ' + val_data['show_passwords'])
 
     proxy_command = ""
 
@@ -317,11 +331,15 @@ def validate_arguments():
     if res == False and not gitRepoHTTP:
         (stdout, stderrout, res) = runOSProcess(ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
         (stdout, stderr, res) = runOSProcess("%s ls-remote %s" % (git_command), logger)
-    
+
     if res == False:
+        if show_passwords and not git_password:
+            stdout = stdout.replace(git_password, "password_removed")
+            stderr = stderr.replace(git_password, "password_removed")
+
         print_error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))
         sys.exit(1)
-    
+
 #Print the scheme
 def do_scheme():
     print(SCHEME)
@@ -344,7 +362,7 @@ logging_config = dict(
               'maxBytes' :  2097152,
               'level': logging.DEBUG,
               'backupCount' : 5 }
-        },        
+        },
     root = {
         'handlers': ['h','file'],
         'level': logging.DEBUG,

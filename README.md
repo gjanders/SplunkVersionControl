@@ -289,6 +289,23 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes
+### 1.2.4
+Updated `splunk_vc_kom_audit_summary` report
+
+Added i=StanzaName to the indexed data when running the audit query
+
+Now attempting to hide (most) passwords from the logs by default (for example when an OS error occurs don't print the stdout including the password in use)
+
+git diff now uses --no-pager to prevent trucation of the diff command with -U0 (no context)
+
+New options:
+`disable_file_deletion` - do not delete files in remote git repo that are not found during backup, useful for testing
+
+`use_wdiff` - sends the output of the diff command to Unix command wdiff to provide a nicer diff output
+
+Updated report:
+`SplunkVersionControl ChangeDetector Non-Directory` now excludes the CIM Risk and Incident_Management datamodels as they update very frequently with close to zero changes (calculationId changes only)
+
 ### 1.2.3
 New option `disable_git_ssl_verify`
 

@@ -15,7 +15,7 @@ from splunkversioncontrol_utility import runOSProcess, get_password
  Store Knowledge Objects
    Attempt to run against the Splunk REST API to obtain various knowledge objects, then persist the knowledge object information required
    to restore the knowledge object if it was deleted/changed to the filesystem
- 
+
 """
 
 #Define the XML scheme for the inputs page
@@ -91,6 +91,13 @@ SCHEME = """<scheme>
                 <title>debugMode</title>
                 <description>turn on DEBUG level logging (defaults to INFO) (true/false), default false</description>
                 <validation>is_bool('debugMode')</validation>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+            </arg>
+            <arg name="show_passwords">
+                <title>show_passwords</title>
+                <description>Show passwords in the DEBUG/ERROR logs (hidden by default)</description>
+                <validation>is_bool('show_passwords')</validation>
                 <required_on_create>false</required_on_create>
                 <data_type>boolean</data_type>
             </arg>
@@ -174,6 +181,20 @@ SCHEME = """<scheme>
                 <data_type>boolean</data_type>
                 <validation>is_bool('disable_git_ssl_verify')</validation>
             </arg>
+            <arg name="use_wdiff">
+                <title>use_wdiff</title>
+                <description>Enables the diff HEAD~1 to be passed to wdiff for improved formatting if run_ko_diff is enabled</description>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('use_wdiff')</validation>
+            </arg>
+            <arg name="disable_file_deletion">
+                <title>disable_file_deletion</title>
+                <description>By default if the app or file no longer exists than it is deleted from the git repo, this stops the deletion from occurring</description>
+                <required_on_create>false</required_on_create>
+                <data_type>boolean</data_type>
+                <validation>is_bool('disable_file_deletion')</validation>
+            </arg>
         </args>
     </endpoint>
 </scheme>
@@ -218,7 +239,7 @@ def print_error(s):
 #Validate the arguments to the app to ensure this will work...
 def validate_arguments():
     val_data = get_validation_data()
-    
+
     if 'debugMode' in val_data:
         debugMode = val_data['debugMode'].lower()
         if debugMode == "true" or debugMode == "t" or debugMode == "1":
@@ -240,7 +261,7 @@ def validate_arguments():
         else:
             print_error("useLocalAuth argument should be true or false, invalid config")
             sys.exit(2)
-    
+
     #If we're not using the useLocalAuth we must have a username/password to work with
     if not useLocalAuth and ('srcUsername' not in val_data or 'srcPassword' not in val_data):
         print_error("useLocalAuth is not set to true and srcUsername/srcPassword not set, invalid config")
@@ -318,14 +339,15 @@ def validate_arguments():
 
     gitRepoURL = val_data['gitRepoURL']
     proxy_command = ""
+    git_password = False
     if gitRepoURL.find("http") == 0:
         gitRepoHTTP = True
         if gitRepoURL.find("password:") != -1:
             start = gitRepoURL.find("password:") + 9
             end = gitRepoURL.find("@")
             logger.debug("Attempting to replace gitRepoURL=%s by subsituting=%s with a password" % (gitRepoURL, gitRepoURL[start:end]))
-            temp_password = get_password(gitRepoURL[start:end], session_key, logger)
-            gitRepoURL = gitRepoURL[0:start-9] + temp_password + gitRepoURL[end:]
+            git_password = get_password(gitRepoURL[start:end], session_key, logger)
+            gitRepoURL = gitRepoURL[0:start-9] + git_password + gitRepoURL[end:]
     else:
         gitRepoHTTP = False
 
@@ -347,21 +369,33 @@ def validate_arguments():
         else:
             proxy_command = "export " + proxy_command + " ; "
 
+    show_passwords = False
+    if 'show_passwords' in val_data:
+        if val_data['show_passwords'].lower() == 'true' or val_data['show_passwords'] == "1":
+            show_passwords = True
+            logger.debug('show_passwords is now true due to show_passwords: ' + val_data['show_passwords'])
+
     (stdout, stderr, res) = runOSProcess("%s %s ls-remote %s" % (proxy_command, git_command, gitRepoURL), logger, shell=True)
     #If we didn't manage to ls-remote perhaps we just need to trust the fingerprint / this is the first run?
     if res == False and not gitRepoHTTP:
+        if not show_passwords and git_password:
+            stdout = stdout.replace(git_password, "password_removed")
+            stderr = stderr.replace(git_password, "password_removed")
         logger.error("Possible first run trying again" % (stdout, stderr))
         (stdout, stderrout, res) = runOSProcess(ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + gitRepoURL[:gitRepoURL.find(":")], logger)
         (stdout, stderr, res) = runOSProcess("%s ls-remote %s" % (git_command, gitRepoURL), logger)
 
     if res == False:
+        if not show_passwords and git_password:
+            stdout = stdout.replace(git_password, "password_removed")
+            stderr = stderr.replace(git_password, "password_removed")
         print_error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))
         logger.error("Failed to validate the git repo URL, stdout of '%s', stderr of '%s'" % (stdout, stderr))
         sys.exit(6)
 
 #Print the scheme
 def do_scheme():
-    print(SCHEME)    
+    print(SCHEME)
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -381,7 +415,7 @@ logging_config = dict(
               'maxBytes' :  2097152,
               'level': logging.DEBUG,
               'backupCount' : 5 }
-        },        
+        },
     root = {
         'handlers': ['h','file'],
         'level': logging.DEBUG,

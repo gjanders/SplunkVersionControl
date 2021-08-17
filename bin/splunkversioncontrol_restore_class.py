@@ -1154,6 +1154,7 @@ class SplunkVersionControlRestore:
 
         self.session_key = config['session_key']
 
+        self.git_password = False
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
             self.gitRepoHTTP = True
@@ -1162,8 +1163,8 @@ class SplunkVersionControlRestore:
                 start = self.gitRepoURL.find("password:") + 9
                 end = self.gitRepoURL.find("@")
                 logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
-                temp_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
-                self.gitRepoURL = self.gitRepoURL[0:start-9] + temp_password + self.gitRepoURL[end:]
+                self.git_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.gitRepoURL = self.gitRepoURL[0:start-9] + self.git_password + self.gitRepoURL[end:]
             else:
                 self.gitRepoURL_logsafe = self.gitRepoURL
         else:
@@ -1219,7 +1220,7 @@ class SplunkVersionControlRestore:
             self.git_branch = "master"
 
         gitFailure = False
-        
+
         if platform.system() == "Windows":
             self.windows = True
         else:
@@ -1282,7 +1283,18 @@ class SplunkVersionControlRestore:
             elif file_per_ko.lower() == 'false' or file_per_ko == "0":
                 logger.debug('file_per_ko set to boolean False from: %s' % (file_per_ko))
             else:
-                logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"') % (self.stanzaName, config['file_per_ko'])
+                logger.warn('i="%s" file_per_ko set to unknown value, should be true or false, defaulting to false value="%s"') % (self.stanzaName, config['file_per_ko'])
+
+        self.show_passwords = False
+        if 'show_passwords' in config:
+            show_passwords = config['show_passwords']
+            if isinstance(show_passwords, bool) and show_passwords:
+                self.show_passwords = True
+            elif isinstance(show_passwords, bool) and not show_passwords:
+                pass
+            elif show_passwords.lower() == 'true' or show_passwords == "1":
+                self.show_passwords = True
+                logger.debug('i="%s" show_passwords is now true due to show_passwords: %s' % (self.stanzaName, config['show_passwords']))
 
         dirExists = os.path.isdir(self.gitTempDir)
         if dirExists and len(os.listdir(self.gitTempDir)) != 0:
@@ -1299,11 +1311,17 @@ class SplunkVersionControlRestore:
                 #Initially we must trust our remote repo URL
                 (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
                 if res == False:
+                    if not self.show_passwords and self.git_password:
+                        output = output.replace(self.git_password, "password_removed")
+                        stderrout = stderrout.replace(self.git_password, "password_removed")
                     logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
 
             #Clone the remote git repo
             (output, stderrout, res) = self.clone_git_dir()
             if res == False:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
@@ -1313,11 +1331,14 @@ class SplunkVersionControlRestore:
                     #include the subdirectory which is the git repo
                     self.gitTempDir = self.gitTempDir + "/" + os.listdir(self.gitTempDir)[0]
                     logger.debug("gitTempDir=%s" % (self.gitTempDir))
-            
-            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1: 
+
+            if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
-        
+
         if not restlist_override:
             #Version Control File that lists what restore we need to do...
             restoreList = "splunkversioncontrol_restorelist"
@@ -1333,11 +1354,17 @@ class SplunkVersionControlRestore:
             #Do a git pull to ensure we are up-to-date
             (output, stderrout, res) = self.git_pull(self.git_branch, pull=True)
             if res == False:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.warn("i=\"%s\" git pull failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'. Wiping the git directory to re-clone" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 shutil.rmtree(self.gitTempDir)
                 #Clone the remote git repo
                 (output, stderrout, res) = self.clone_git_dir()
                 if res == False:
+                    if not self.show_passwords and self.git_password:
+                        output = output.replace(self.git_password, "password_removed")
+                        stderrout = stderrout.replace(self.git_password, "password_removed")
                     logger.fatal("i=\"%s\" git clone failed for some reason...on url=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                     sys.exit(1)
                 else:
@@ -1452,11 +1479,17 @@ class SplunkVersionControlRestore:
                 #Do a git pull to ensure we are up-to-date
                 (output, stderrout, res) = self.git_pull(tag)
                 if res == False:
+                    if not self.show_passwords and self.git_password:
+                        output = output.replace(self.git_password, "password_removed")
+                        stderrout = stderrout.replace(self.git_password, "password_removed")
                     logger.error("i=\"%s\" user=%s, object name=%s, type=%s, time=%s, git checkout of tag=%s failed in directory dir=%s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, user, name, obj_type, time, tag, self.gitTempDir, output, stderrout))
                 else:
                     logger.info("i=\"%s\" Successfully ran the git checkout for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
-                
-                if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1: 
+
+                if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
+                    if not self.show_passwords and self.git_password:
+                        output = output.replace(self.git_password, "password_removed")
+                        stderrout = stderrout.replace(self.git_password, "password_removed")
                     logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                     gitFailure = True
                     if stderrout.find("timeout after") != -1:
@@ -1529,4 +1562,7 @@ class SplunkVersionControlRestore:
             shutil.rmtree(self.gitTempDir)
 
         logger.info("i=\"%s\" Done" % (self.stanzaName))
+        if len(resList) == 0:
+            message = "Empty restore list?"
+
         return (result, message)

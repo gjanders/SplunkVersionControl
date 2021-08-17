@@ -25,6 +25,8 @@ excludeOwner = <value>
 * comma separated list of owners objects that should be transferred
 debugMode = <boolean>
 * turn on DEBUG level logging (defaults to INFO) (true/false), default false
+show_passwords = <boolean>
+* Show passwords in the DEBUG/ERROR logs (hidden by default)
 useLocalAuth = <boolean>
 * do not use the srcUsername/srcPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false), default false
 remoteAppName = <value>
@@ -33,7 +35,7 @@ appsList = <value>
 * Comma separated list of apps, this changes Splunk Version Control to not list all applications and instead only runs a backup on the specified apps
 git_command = <value>
 * defaults to 'git', can be overriden (for example on a Windows server) to use a full path to the git command
-ssh_command = <value> 
+ssh_command = <value>
 * defaults to 'ssh', can be overriden (for example on a Windows server) to use a full path to the ssh command
 proxy = <value>
 * If supplied provides a proxy setting to use to access the srcURL (https proxy). Use https://user:password:passwordinpasswordsconf@10.10.1.0:3128 and the application will obtain the password for the entry 'passwordinpasswordsconf'. If password: is not used the password is used as per a normal proxy setting, for example https://user:password@10.10.1.0:3128
@@ -53,6 +55,10 @@ run_ko_diff = <boolean>
 * Should output of the modular input include diff information (requires run_ko_query to be true, defaults to false)
 disable_git_ssl_verify = <boolean>
 * Use GIT_SSL_NO_VERIFY=true on all git commands
+use_wdiff = <boolean>
+* Enables the diff HEAD~1 to be passed to wdiff for improved formatting if run_ko_diff is enabled
+disable_file_deletion = <boolean>
+* By default if the app or file no longer exists than it is deleted from the git repo, this stops the deletion from occurring
 
 [splunkversioncontrol_restore://<name>]
 destURL = <value>
@@ -71,6 +77,8 @@ auditLogsLookupBackTime = <value>
 * This is how far back the audit logs will be checked to ensure that a restore entry is valid, this should be set to your interval time or slightly more, defaults to -1h (use Splunk format)
 debugMode = <boolean>
 * turn on DEBUG level logging (defaults to INFO) (true/false), default false
+show_passwords = <boolean>
+* Show passwords in the DEBUG/ERROR logs (hidden by default)
 useLocalAuth = <boolean>
 * do not use the srcUsername/srcPassword, use the session_key of the user running the modular input instead (works on localhost only) (true/false), default false
 remoteAppName = <value>
@@ -91,4 +99,3 @@ file_per_ko = <boolean>
 * Do you want one file per knowledge object? Or a combined file? Defaults to false (i.e. 1 large file for global dashboards in an app). Note that if you change this you will need to re-create or wipe the repository as the files are stored differently...Note this setting should match in both backup and restore modular inputs for a particular repo
 disable_git_ssl_verify = <boolean>
 * Use GIT_SSL_NO_VERIFY=true on all git commands
-

@@ -406,7 +406,7 @@ class SplunkVersionControlBackup:
                 # in the file per-ko method we want 1 file per knowledge object...
                 global_type_dir = globalStorageDir + "/" + type
                 files, dirs = self.write_files(global_type_dir, infoList["global"])
-                self.remove_dir_contents(files, dirs, type, "global")
+                self.remove_dir_contents(files, dirs, type, "global", self.disable_file_deletion)
             else:
                 # in the original method we dumped 1 large file with all objects of this type at this scope
                 with open(globalStorageDir + "/" + type, 'w', encoding="utf-8") as f:
@@ -422,7 +422,7 @@ class SplunkVersionControlBackup:
             if self.file_per_ko:
                 app_type_dir = appLevelStorageDir + "/" + type
                 files, dirs = self.write_files(app_type_dir, infoList["app"])
-                self.remove_dir_contents(files, dirs, type, "app")
+                self.remove_dir_contents(files, dirs, type, "app", self.disable_file_deletion)
             else:
             # in the original method we dumped 1 large file with all objects of this type at this scope
                 with open(appLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
@@ -439,7 +439,7 @@ class SplunkVersionControlBackup:
                 # in the file per-ko method we want 1 file per knowledge object...
                 user_type_dir = userLevelStorageDir + "/" + type
                 files, dirs = self.write_files(user_type_dir, infoList["user"])
-                self.remove_dir_contents(files, dirs, type, "user")
+                self.remove_dir_contents(files, dirs, type, "user", self.disable_file_deletion)
             else:
                 # in the original method we dumped 1 large file with all objects of this type at this scope
                 with open(userLevelStorageDir + "/" + type, 'w', encoding="utf-8") as f:
@@ -468,9 +468,12 @@ class SplunkVersionControlBackup:
     # Shared function to remove old files/directories
     #
     ###########################
-    def remove_dir_contents(self, files, dirs, type, scope):
+    def remove_dir_contents(self, files, dirs, type, scope, disabled):
         # At this point we have zero or more files that may have been deleted from splunk but exist on the filesystem
         logger.info("i=\"%s\" the following files were left after completing the backup at scope=%s for type=%s list=\"%s\"" % (self.stanzaName, scope, type, files))
+        if disabled:
+            logger.info("i=\"%s\" no files will be removed as requested by disable file deletion option" % (self.stanzaName))
+            return
         for a_file in files:
             logger.info("i=\"%s\" removing file=%s" % (self.stanzaName, a_file))
             os.remove(a_file)
@@ -559,6 +562,78 @@ class SplunkVersionControlBackup:
 
         return None
 
+    # parse the results of the wdiff command
+    def parse_wdiff(self, output):
+        results = {}
+        file=""
+        diff=""
+        file2=""
+
+        for line in output.split("\n"):
+            # look for the b/file changes if has been creatd or exists
+            if line.find("{+++ b") == 0 or line.find("{+diff --git a/") == 0:
+                end = line.rfind("}")
+                start = line.find("{+++ b")
+                if start == -1:
+                    start = line.find("a/")+2
+                    end = line.find(" ",start)+1
+                else:
+                    start = start + 7
+                if file!="":
+                    logger.debug("i=\"%s\" recording file=%s, diff=%s" % (self.stanzaName, file, diff))
+                    if file in results:
+                        diff = results[file] + "\n" + diff
+                    results[file] = diff
+                else:
+                    logger.debug("i=\"%s\" recording file=%s, diff=%s" % (self.stanzaName, file2, diff))
+                    if file2 in results:
+                        diff = results[file2] + "\n" + diff
+                    results[file2] = diff
+                file = line[start:end-1]
+                diff=""
+                file2=""
+            # --- shows us the file that changed if it was deleted or already exists
+            elif line.find("[--- a") == 0 or line.find("[-diff --git a/") == 0:
+                end = line.rfind("]")
+                start = line.find("[--- a")
+                if start == -1:
+                    start = line.find("a/")+2
+                    end = line.find(" ",start)+1
+                else:
+                    start = start + 7
+                file2 = line[start:end-1]
+            # this file has been deleted
+            elif line.find("{+++ /dev/null") == 0:
+                if file!="":
+                    if file in results:
+                        diff = results[file] + "\n" + diff
+                    results[file] = diff
+                else:
+                    if file2 in results:
+                        diff = results[file2] + "\n" + diff
+                    results[file2] = diff
+                file = ""
+                diff=""
+            # this file has been created
+            elif line.find("[--- /dev/null") == 0:
+                pass
+            # if it's not === and not an empty line then it's related to the diff
+            elif line.find("======================================================================") == -1 and line.strip()!="":
+                diff=diff + line + "\n"
+        # we had more than zero results, record this
+        if file!="":
+            logger.debug("i=\"%s\" recording file=%s, diff=%s" % (self.stanzaName, file, diff))
+            if file in results:
+                diff = results[file] + "\n" + diff
+            results[file] = diff
+        elif file2!="":
+            logger.debug("i=\"%s\" recording file=%s, diff=%s" % (self.stanzaName, file2, diff))
+            if file2 in results:
+                diff = results[file2] + "\n" + diff
+            results[file2] = diff
+
+        return results
+
     # write the contents out from what we have found to have changed
     def process_ko_query_contents(self, results, tag):
         if not 'results' in results:
@@ -568,6 +643,8 @@ class SplunkVersionControlBackup:
         file_list, dir_list = self.list_dir_contents(self.gitTempDir)
         str = ""
         for a_result in results['results']:
+            stanza = "i=\"%s\" " % (self.stanzaName)
+            str = "%s%s" % (str, stanza)
             for key in a_result:
                 if key == "scope":
                     pass
@@ -611,7 +688,12 @@ class SplunkVersionControlBackup:
                             if len(match) > 0:
                                 overall_matches = match
                             else:
-                                logger.warn("i=\"%s\" looking for file_name=%s in file_str=%s tag=%s but did not find a match" % (self.stanzaName, file_name, file_str, tag))
+                                if 'action' in a_result and a_result['action'].find("DELETE") == -1:
+                                    logger.warn("i=\"%s\" looking for file_name=%s in file_str=%s tag=%s but did not find a match" % (self.stanzaName, file_name, file_str, tag))
+                                else:
+                                    deleted_file_str = a_result['app_name'] + "/" + a_scope + "/" + a_result['ko_type'] + "/" + a_result['user'] + "/" + file_name
+                                    overall_matches = [ deleted_file_str ]
+
             str = str + "tag=" + tag
             first = True
             for match in overall_matches:
@@ -622,19 +704,35 @@ class SplunkVersionControlBackup:
                     str = str + " OR git_location=" + match
 
             if self.run_ko_diff:
-                diff_str = "cd {0}; {1} diff HEAD~1".format(self.gitTempDir, self.git_command)
+                diff_str = "cd {0}; ".format(self.gitTempDir)
+                if self.use_wdiff:
+                    diff_str = diff_str + "{0} --no-pager diff -U0 HEAD~1 | wdiff -d".format(self.git_command)
+                else:
+                    diff_str = diff_str + "{0} --no-pager diff -U0 HEAD~1".format(self.git_command)
                 output, stderrout, res = runOSProcess(diff_str, logger, timeout=300, shell=True)
-                if res == False:
+                # wdiff can return 1 for a change which triggers the res=False line
+                if res == False and not self.use_wdiff:
                     logger.error("i=\"%s\" Failure while running git diff HEAD~1, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
                 else:
-                    patch = PatchSet(output)
-                    for entry in patch:
-                        logger.debug("i=\"%s\" checking to see if path=%s exists in the overall_matches list" % (self.stanzaName, entry.path))
-                        if entry.path in overall_matches:
-                            str = "%s diff=%s" % (str, entry)
+                    if self.use_wdiff:
+                        results = self.parse_wdiff(output)
+                        for path, diff in results.items():
+                            logger.debug("i=\"%s\" checking to see if path=%s exists in the overall_matches list" % (self.stanzaName, path))
+                            if path in overall_matches:
+                                str = "%s diff=%s" % (str, diff)
+                    else:
+                        patch = PatchSet(output)
+                        for entry in patch:
+                            logger.debug("i=\"%s\" checking to see if path=%s exists in the overall_matches list" % (self.stanzaName, entry.path))
+                            if entry.path in overall_matches:
+                                str = "%s diff=%s" % (str, entry)
             str = str + "\n"
-        print(str)
-        #logger.info(str)
+        if str != "":
+            str = str.rstrip('\n')
+            print(str)
+            logger.debug("i=\"%s\" Recording output of: \"%s\"" % (self.stanzaName, str))
+        else:
+            logger.info("i=\"%s\" No results from ko_query" % (self.stanzaName))
 
     ###########################
     #
@@ -780,7 +878,7 @@ class SplunkVersionControlBackup:
                 # in the file per-ko method we want 1 file per knowledge object...
                 global_macro_dir = globalStorageDir + "/macros"
                 files, dirs = self.write_files(global_macro_dir, macros["global"])
-                self.remove_dir_contents(files, dirs, "macros", "global")
+                self.remove_dir_contents(files, dirs, "macros", "global", self.disable_file_deletion)
             else:
                 # in the original method we dumped 1 large file with all macros at this scope
                 with open(globalStorageDir + "/macros", 'w', encoding="utf-8") as f:
@@ -797,7 +895,7 @@ class SplunkVersionControlBackup:
                 # in the file per-ko method we want 1 file per knowledge object...
                 app_macro_dir = appLevelStorageDir + "/macros"
                 files, dirs = self.write_files(app_macro_dir, macros["app"])
-                self.remove_dir_contents(files, dirs, "macros", "app")
+                self.remove_dir_contents(files, dirs, "macros", "app", self.disable_file_deletion)
             else:
                 # in the original method we dumped 1 large file with all macros at this scope
                 with open(appLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
@@ -814,7 +912,7 @@ class SplunkVersionControlBackup:
                 # in the file per-ko method we want 1 file per knowledge object...
                 user_macro_dir = userLevelStorageDir + "/macros"
                 files, dirs = self.write_files(user_macro_dir, macros["user"])
-                self.remove_dir_contents(files, dirs, "macros", "user")
+                self.remove_dir_contents(files, dirs, "macros", "user", self.disable_file_deletion)
             else:
                 # in the original method we dumped 1 large file with all macros at this scope
                 with open(userLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
@@ -1299,12 +1397,25 @@ class SplunkVersionControlBackup:
             if run_ko_diff == "true" or run_ko_diff=="t" or run_ko_diff == "1":
                 self.run_ko_diff = True
 
+        self.use_wdiff = False
+        if 'use_wdiff' in config:
+            use_wdiff = config['use_wdiff'].lower()
+            if use_wdiff == "true" or use_wdiff=="t" or use_wdiff == "1":
+                self.use_wdiff = True
+
+        self.disable_file_deletion = False
+        if 'disable_file_deletion' in config:
+            disable_file_deletion = config['disable_file_deletion'].lower()
+            if disable_file_deletion == "true" or disable_file_deletion == "1":
+                self.disable_file_deletion = True
+                logger.debug("i=\"%s\" useLocalAuth enabled" % (self.stanzaName))
+
         useLocalAuth = False
         if 'useLocalAuth' in config:
             useLocalAuth = config['useLocalAuth'].lower()
             if useLocalAuth == "true" or useLocalAuth=="t" or useLocalAuth == "1":
                 useLocalAuth = True
-                logger.debug("useLocalAuth enabled")
+                logger.debug("i=\"%s\" useLocalAuth enabled" % (self.stanzaName))
             else:
                 useLocalAuth = False
 
@@ -1324,6 +1435,7 @@ class SplunkVersionControlBackup:
 
         self.session_key = config['session_key']
 
+        self.git_password = False
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
             self.gitRepoHTTP = True
@@ -1332,8 +1444,8 @@ class SplunkVersionControlBackup:
                 start = self.gitRepoURL.find("password:") + 9
                 end = self.gitRepoURL.find("@")
                 logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
-                temp_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
-                self.gitRepoURL = self.gitRepoURL[0:start-9] + temp_password + self.gitRepoURL[end:]
+                self.git_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.gitRepoURL = self.gitRepoURL[0:start-9] + self.git_password + self.gitRepoURL[end:]
             else:
                 self.gitRepoURL_logsafe = self.gitRepoURL
         else:
@@ -1419,6 +1531,12 @@ class SplunkVersionControlBackup:
             else:
                 logger.warn('i=\"%s\" file_per_ko set to unknown value, should be true or false, defaulting to false value=\"%s\"' % (self.stanzaName, config['file_per_ko']))
 
+        self.show_passwords = False
+        if 'show_passwords' in config:
+            if config['show_passwords'].lower() == 'true' or config['show_passwords'] == "1":
+                self.show_passwords = True
+                logger.debug('show_passwords is now true due to show_passwords: ' + config['show_passwords'])
+
         #From server
         self.splunk_rest = config['srcURL']
         excludedList = [ "srcPassword", "session_key" ]
@@ -1477,10 +1595,16 @@ class SplunkVersionControlBackup:
                 #Initially we must trust our remote repo URL
                 (output, stderrout, res) = runOSProcess(self.ssh_command + " -n -o \"BatchMode yes\" -o StrictHostKeyChecking=no " + self.gitRepoURL[:self.gitRepoURL.find(":")], logger)
                 if res == False:
+                    if not self.show_passwords and self.git_password:
+                        output = output.replace(self.git_password, "password_removed")
+                        stderrout = stderrout.replace(self.git_password, "password_removed")
                     logger.warn("i=\"%s\" Unexpected failure while attempting to trust the remote git repo?! stdout '%s' stderr '%s'" % (self.stanzaName, output, stderrout))
 
             (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
@@ -1491,6 +1615,9 @@ class SplunkVersionControlBackup:
                     logger.debug("gitTempDir=%s" % (self.gitTempDir))
 
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
 
@@ -1556,12 +1683,18 @@ class SplunkVersionControlBackup:
         #Always start from the git branch and the current version (just in case changes occurred)
         (output, stderrout, res) = self.run_git_pull()
         if res == False:
+            if not self.show_passwords and self.git_password:
+                output = output.replace(self.git_password, "password_removed")
+                stderrout = stderrout.replace(self.git_password, "password_removed")
             logger.warn("i=\"%s\" git checkout %s or git pull failed, stdout is '%s' stderrout is '%s'. Wiping git directory" % (self.stanzaName, self.git_branch, output, stderrout))
 
             shutil.rmtree(self.gitTempDir)
 
             (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
@@ -1695,12 +1828,18 @@ class SplunkVersionControlBackup:
         #Always start from the git branch and the current version (just in case someone was messing around in the temp directory)
         (output, stderrout, res) = self.run_git_pull()
         if res == False:
+            if not self.show_passwords and self.git_password:
+                output = output.replace(self.git_password, "password_removed")
+                stderrout = stderrout.replace(self.git_password, "password_removed")
             logger.warn("i=\"%s\" git checkout %s or git pull failed, stdout is '%s' stderrout is '%s', wiping git directory and trying again" % (self.stanzaName, self.git_branch, output, stderrout))
 
             shutil.rmtree(self.gitTempDir)
 
             (output, stderrout, res) = self.clone_git_dir(config)
             if res == False:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
                 sys.exit(1)
             else:
@@ -1734,6 +1873,9 @@ class SplunkVersionControlBackup:
                 (output, stderrout, res) = runOSProcess(push_str, logger, timeout=300, shell=True)
                 res=True
             if res == False:
+                if not self.show_passwords and self.git_password:
+                    output = output.replace(self.git_password, "password_removed")
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.error("i=\"%s\" Failure while commiting the new files, backup completed but git may not be up-to-date, stdout '%s' stderrout of '%s'" % (self.stanzaName, output, stderrout))
             else:
                 # we want to run a knowledge object query against Splunk to determine "what changed"
