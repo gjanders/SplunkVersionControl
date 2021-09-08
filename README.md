@@ -289,6 +289,26 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes
+### 1.2.5
+Updates to:
+`splunkversioncontrol_backup_class.py`
+
+`splunkversioncontrol_restore_class.py`
+
+To remove passwords in more cases
+
+Updates to dashboards:
+`splunkversioncontrol_restore.xml`
+
+`splunkversioncontrol_restore_dynamic.xml`
+
+To provide a drop down list of available knowledge objects in addition to the text field option
+
+Updated reports:
+`SplunkVersionControl CheckAdmin` - simplified to use the Splunk users list
+
+`splunk_vc_kom_audit_summary` - updated to ignore the manager URI's and handle proxied REST calls from the KOM report
+
 ### 1.2.4
 Updated `splunk_vc_kom_audit_summary` report
 

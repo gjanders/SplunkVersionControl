@@ -36,6 +36,73 @@
       <choice value="collection">collection (kvstore)</choice>
       <choice value="viewstate">viewstate</choice>
       <choice value="times">times</choice>
+      <change>
+        <condition value="dashboard">
+          <set token="rest_filter">/data/ui/views</set>
+        </condition>
+        <condition value="savedsearch">
+          <set token="rest_filter">/saved/searches</set>
+        </condition>
+        <condition value="macro">
+          <set token="rest_filter">/configs/conf-macros</set>
+        </condition>
+        <condition value="fieldalias">
+          <set token="rest_filter">/data/props/fieldaliases</set>
+        </condition>
+        <condition value="fieldextraction">
+          <set token="rest_filter">/data/props/extractions</set>
+        </condition>
+        <condition value="fieldtransformation">
+          <set token="rest_filter">/data/transforms/extractions</set>
+        </condition>
+        <condition value="navmenu">
+          <set token="rest_filter">/data/ui/nav</set>
+        </condition>
+        <condition value="datamodel">
+          <set token="rest_filter">/datamodel/model</set>
+        </condition>
+        <condition value="panels">
+          <set token="rest_filter">/data/ui/panels</set>
+        </condition>
+        <condition value="calcfields">
+          <set token="rest_filter">/data/props/calcfields</set>
+        </condition>
+        <condition value="workflowaction">
+          <set token="rest_filter">/data/ui/workflow-actions</set>
+        </condition>
+        <condition value="sourcetyperenaming">
+          <set token="rest_filter">/data/props/sourcetype-rename</set>
+        </condition>
+        <condition value="tags">
+          <set token="rest_filter">/configs/conf-tags</set>
+        </condition>
+        <condition value="eventtypes">
+          <set token="rest_filter">/saved/eventtypes</set>
+        </condition>
+        <condition value="lookupdef">
+          <set token="rest_filter">/data/transforms/lookups</set>
+        </condition>
+        <condition value="automaticlookup">
+          <set token="rest_filter">/data/props/lookups</set>
+        </condition>
+        <condition value="collection">
+          <set token="rest_filter">/storage/collections/config</set>
+        </condition>
+        <condition value="viewstate">
+          <set token="rest_filter">/configs/conf-viewstates</set>
+        </condition>
+        <condition value="times">
+          <set token="rest_filter">/configs/conf-times</set>
+        </condition>
+      </change>
+    </input>
+    <input type="dropdown" token="name">
+      <label>Object Name</label>
+      <fieldForLabel>title</fieldForLabel>
+      <fieldForValue>title</fieldForValue>
+      <search>
+        <query>| rest splunk_server=local /servicesNS/-/$app$/$rest_filter$ count=0 f=title f=eai:acl*  | search eai:acl.app="$app$"| dedup title | fields title</query>
+      </search>
     </input>
     <input type="text" token="name">
       <label>Object URI/Name (not label)</label>

@@ -1334,7 +1334,6 @@ class SplunkVersionControlRestore:
 
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 if not self.show_passwords and self.git_password:
-                    output = output.replace(self.git_password, "password_removed")
                     stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1374,6 +1373,8 @@ class SplunkVersionControlRestore:
                 logger.info("i=\"%s\" Successfully ran the git pull for URL=%s from directory dir=%s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitRootDir))
 
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
+                if not self.show_passwords and self.git_password:
+                    stderrout = stderrout.replace(self.git_password, "password_removed")             
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
                 if stderrout.find("timeout after") != -1:
@@ -1488,7 +1489,6 @@ class SplunkVersionControlRestore:
 
                 if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                     if not self.show_passwords and self.git_password:
-                        output = output.replace(self.git_password, "password_removed")
                         stderrout = stderrout.replace(self.git_password, "password_removed")
                     logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                     gitFailure = True

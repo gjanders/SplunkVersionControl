@@ -1616,7 +1616,6 @@ class SplunkVersionControlBackup:
 
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 if not self.show_passwords and self.git_password:
-                    output = output.replace(self.git_password, "password_removed")
                     stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
@@ -1705,6 +1704,8 @@ class SplunkVersionControlBackup:
                 logger.error("i=\"%s\" git configuration failed for some reason output=\"%s\", stderrout=\"%s\"" % (self.stanzaName, output2, stderrout2))
 
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
+            if not self.show_passwords and self.git_password:
+                stderrout = stderrout.replace(self.git_password, "password_removed")
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
             gitFailure = True
 
@@ -1850,6 +1851,8 @@ class SplunkVersionControlBackup:
                 logger.error("i=\"%s\" git configuration failed for some reason output=\"%s\", stderrout=\"%s\"" % (self.stanzaName, output2, stderrout2))
 
         if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
+            if not self.show_passwords and self.git_password:
+                stderrout = stderrout.replace(self.git_password, "password_removed")
             logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
             gitFailure = True
 
@@ -1890,6 +1893,8 @@ class SplunkVersionControlBackup:
                     else:
                         logger.warn("i=\"%s\" unable to obtain the macro required to run the knowledge objects query" % (self.stanzaName))
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
+                if not self.show_passwords and self.git_password:
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanzaName, stderrout))
                 gitFailure = True
             else:
