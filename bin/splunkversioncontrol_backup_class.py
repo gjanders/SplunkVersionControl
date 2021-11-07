@@ -667,6 +667,7 @@ class SplunkVersionControlBackup:
                     if self.file_per_ko:
                         if not 'ko_name' in a_result:
                             logger.info("i=\"%s\" ko_name is null, cannot identify an exact changed object \"%s\" tag=%s" % (self.stanzaName, a_result, tag))
+                            overall_matches_list = []
                             if 'user' in a_result:
                                 #TODO may not work on Windows
                                 find_str = "/" + a_result['user'] + "/"
@@ -674,7 +675,8 @@ class SplunkVersionControlBackup:
                             else:
                                 find_str = a_result['ko_type']
                                 overall_matches_list = [ entry[0:entry.find(find_str)+len(find_str)] for entry in overall_matches if entry.find(find_str) != -1 ]
-                            overall_matches = list(set(overall_matches_list))
+                            if len(overall_matches_list) > 0:
+                                overall_matches = overall_matches + list(set(overall_matches_list))
                         else:
                             file_name = self.create_file_name(a_result['ko_name'])
                             logger.debug("i=\"%s\" looking for file_name=%s tag=%s" % (self.stanzaName, file_name, tag))
