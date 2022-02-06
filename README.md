@@ -289,6 +289,11 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes
+### 1.2.7
+Updated Splunk python SDK to 1.6.18
+
+Corrected an issue where a DELETE combined with other operations could cause a stacktrace if using the `run_ko_diff` option 
+
 ### 1.2.6
 Updates to:
 `splunkversioncontrol_backup_class.py`

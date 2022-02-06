@@ -667,7 +667,7 @@ class SplunkVersionControlBackup:
                     if self.file_per_ko:
                         if not 'ko_name' in a_result:
                             logger.info("i=\"%s\" ko_name is null, cannot identify an exact changed object \"%s\" tag=%s" % (self.stanzaName, a_result, tag))
-                            overall_matches_list = []
+                            overall_matches_list = []                        
                             if 'user' in a_result:
                                 #TODO may not work on Windows
                                 find_str = "/" + a_result['user'] + "/"
@@ -676,7 +676,7 @@ class SplunkVersionControlBackup:
                                 find_str = a_result['ko_type']
                                 overall_matches_list = [ entry[0:entry.find(find_str)+len(find_str)] for entry in overall_matches if entry.find(find_str) != -1 ]
                             if len(overall_matches_list) > 0:
-                                overall_matches = overall_matches + list(set(overall_matches_list))
+                                overall_matches = overall_matches + list(set(overall_matches_list))                            
                         else:
                             file_name = self.create_file_name(a_result['ko_name'])
                             logger.debug("i=\"%s\" looking for file_name=%s tag=%s" % (self.stanzaName, file_name, tag))
@@ -690,7 +690,7 @@ class SplunkVersionControlBackup:
                             if len(match) > 0:
                                 overall_matches = match
                             else:
-                                if 'action' in a_result and a_result['action'].find("DELETE") == -1:
+                                if 'action' in a_result and "DELETE" in a_result['action']:
                                     logger.warn("i=\"%s\" looking for file_name=%s in file_str=%s tag=%s but did not find a match" % (self.stanzaName, file_name, file_str, tag))
                                 else:
                                     deleted_file_str = a_result['app_name'] + "/" + a_scope + "/" + a_result['ko_type'] + "/" + a_result['user'] + "/" + file_name
