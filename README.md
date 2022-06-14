@@ -294,6 +294,7 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 ## Release Notes
 ### 1.2.8
 Updated README.md
+Updated Splunk python SDK to 1.6.20
 
 ### 1.2.7
 Updated Splunk python SDK to 1.6.18
