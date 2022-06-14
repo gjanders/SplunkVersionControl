@@ -49,9 +49,9 @@ The restoration script then validates that the username entered in the lookup fi
 
 If you are using the dynamic version of the restore dashboard (custom command `postversioncontrolrestore`, an alternative report named "Splunk Version Control Audit Query POST" runs to check the audit logs, this report determines if the restoration request was made by the user in question. The report returns 0 or more results and if it returns results for the particular user, the restore proceeds.
 
-Due to the above there is the possiblity that multiple users may trigger a restore while a restore is in progress, a kvstore is used to prevent this from occurring and an additional restore attempt when the restore process is in progress results in an error message to try again.
+Due to the above there is the possibility that multiple users may trigger a restore while a restore is in progress, a kvstore is used to prevent this from occurring and an additional restore attempt when the restore process is in progress results in an error message to try again.
 
-If a user attempts to restore the objects of another user, or attempts to restore the objects as a different user, this is allowed if the user has the admin role (which is determined by the saved search "SplunkVersionControl CheckAdmin").
+If a user attempts to restore the objects of another user, or attempts to restore the objects as a different user, this is allowed if the user has the admin role (which is determined by the saved search "SplunkVersionControl CheckAdmin"). You can change this behaviour if you wish by changing this report...
 
 ## Why use a lookup file and not trigger a remote command execution?
 A custom command named postversioncontrolrestore and the accompanying dashboard `splunkversioncontrolrestore_dynamic` were created for this purpose in version 1.0.7
@@ -177,7 +177,7 @@ There are also many online resources to help with learning git
 
 ### Splunk Version Control Restore
 - destURL - URL of the remote or local Splunk instance that should be queried for restores, this needs to point to the REST port of the instance (port 8089)
-- destUsername - the username to use on the instance to login
+- destUsername - the username to use on the instance to login. Note that the user will run reports from this app and will require access to the `_audit` index along with access to the REST endpoint for checking if users are admins. Finally this is the user used to restore a knowledge object
 - destPassword - the password to use on the instance to login, use `password:<name in passwords.conf>` and the app will attempt to find the password in your passwords.conf file
 - gitTempDir - a directory that the git clone will create, and potentially be deleted. For example /tmp/git_restore or e:\temp\git_restore
 - gitRepoURL - an SSH based git repo URL which will be used to checkout the required tag to restore from 
@@ -231,6 +231,9 @@ Refer to [this issue on github](https://github.com/gjanders/SplunkVersionControl
 Note that you can run this from the command line if the logs are not getting populated:
 
 `splunk cmd splunkd print-modinput-config splunkversioncontrol_backup splunkversioncontrol_backup://<your_input_name_goes_here>`
+
+If the issue relates to restoration, ensure that the user configured for the restore section has the required access to run the reports that access the `_audit` index, along with the REST endpoint for users. Finally the user to restore reports must be able to write the knowledge objects.
+For further information also refer to the Security Concerns section of this document. 
 
 Finally the log files are mentioned under the "Where are the logs?" section of this document
 
@@ -290,7 +293,7 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 
 ## Release Notes
 ### 1.2.8
-
+Updated README.md
 
 ### 1.2.7
 Updated Splunk python SDK to 1.6.18
