@@ -105,7 +105,7 @@
       </search>
     </input>    
     <input type="text" token="name">
-      <label>Object URI/Name (not label)</label>
+      <label>Object URI/Name (not label), wildcards supported</label>
     </input>
     <input type="dropdown" token="tag">
       <label>Restore date/time</label>
@@ -175,7 +175,7 @@
         </h1>
         <h2>Application Name</h2>Splunk Application Name where the object is located<br/>
         <h2>Object Type</h2>The Splunk knowledge object type, such as dashboard, savedsearch et cetera<br/>
-        <h2>Object URI/Name</h2>The dashboard URI (in this current case splunkversioncontrol_restore) or the name of the savedsearch et cetera, note this field is case sensitive<br/>
+        <h2>Object URI/Name</h2>The dashboard URI (in this current case splunkversioncontrol_restore_dynamic) or the name of the savedsearch et cetera, note this field is case sensitive. Wilcards are supported, so Test* will restore all knowledge objects starting with the keyword Test<br/>
         <h2>Restore date/time</h2>The date/time of the git tag that should be used to restore the object, choose the closest date/time to which you know the object either existed or was in a working state<br/>
         <h2>Restore as user?</h2>This field is for Splunk admin use only. If you are restoring an object and it needs to be owned by another user, use this field to enter the username (useful for when the object owner no longer exists in Splunk)<br/>
         <h2>Scope/Sharing</h2>Did the object have application level/global sharing or user level (private) sharing? If All is selected the restoration will run against both user level and app/global level. <br/>Note that you can have an object, such as a dashboard with the same name at the user/private sharing level and the app sharing level within the same Splunk application which is why this field exists<br/>        

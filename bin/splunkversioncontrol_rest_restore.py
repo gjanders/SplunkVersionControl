@@ -266,8 +266,8 @@ class SVCRestore(splunk.rest.BaseRestHandler):
 
             (result, message) = svc_restore_obj.run_script(resList, json_dict)
             if result == True:
-                self.response.write("Restore has completed successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username))
-                logger.info("Restore has completed successfully in app=%s, object of type=%s, with name=%s was restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username))
+                self.response.write("Restore has completed successfully in app %s, object of type %s, with name %s was restored from tag %s, scope %s with restoreAsUser %s and your username of %s. \n\nMessages=\n%s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))
+                logger.info("Restore has completed successfully in app=%s, object of type=%s, with name=%s was restored from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s. Messages=%s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))
             else:
                 self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s, from tag %s, scope %s with restoreAsUser %s and your username of %s. Message is %s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))
                 logger.warn("Restore has failed to complete successfully in app=%s, object of type=%s, with name=%s, from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s, message=%s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))

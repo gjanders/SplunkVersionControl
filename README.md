@@ -201,13 +201,31 @@ To get passwords into or out of the passwords.conf you may wish to use https://s
 
 The context of the application name (default of SplunkVersionControl) will be checked first for the password, if that fails a query to all contexts /-/-/ will occur, realms will be ignored, only the name of the password is used for searching so any realm (or lack of realm) will work for storing the password
 
+## Example setup
+`srcURL` - so this is the remote port of the Splunk Cloud instance or localhost, for example: https://mycloudinstance.splunkcloud.com:8089
+`srcUsername` - as you'd expect, the username to login via REST API
+`srcPassword` - you can specify it in plaintext *or* if you do something like `password:splunkversioncontrol_user`, then the `splunkversioncontrol_use`r should be in passwords.conf (I use https://splunkbase.splunk.com/app/4013/ to add/remove passwords from passwords.conf but the command line works too)
+`gitTempDir` - I use `/tmp/git_backup` but the location can be any empty directory
+`gitRepoURL` - I use `https://myuser:password:myuser_token@git.tools.company.om/scm/splunk/ko_automated_backup.git`, this can be an SSH-based or a HTTPS-based repo
+
+In the above the `myuser_token` again exists in passwords.conf, again tokens work, SSH-based URL's work too! Effectively this the URL you would use with "git clone"
+
+`git_name` - SVC Automation
+`git_email` - gareth...@company.com
+`git_proxy` - if you use a proxy to access git, for example http://proxy:8080, this is optional
+
+I do not use a proxy to access my Splunk instances but if you cannot access to the Splunk cloud instance without a proxy then set the "proxy" setting.
+
+Finally, please tick `file_per_ko` that's a nicer way to store the objects in git.
+I also tick `disable_git_ssl_verify` and I have sslVerify - false due to some issues with ssl validation
+
 ## Macros
 The following macros exist and are relate to the `splunkversioncontrol_restore_dynamic` dashboard
 - `splunk_vc_name` - this macro is the name of the `splunkversioncontrol_restore` modular input name on the remote (or local) system where the restore occurs
 - `splunk_vc_url` - this macro is the URL endpoint of the remote system, defaults to `https://localhost:8089/services/splunkversioncontrol_rest_restore`, you will need to change this if you have a remote instance performing the backup/restore operations, for example if you are on a search head cluster 
 - `splunk_vc_timeout` - this is the time delay between triggering the remote command and waiting for the `_audit` index to catchup with a log entry to advise the command was run, if set too short the restore may fail because the `| postversioncontrolrestore` search has not appeared in the `_audit` index yet
 - `sslVerify` - defaults to "False", this can be set to the location of a CA file to be used by the python requests library to validate the SSL certificates in use
-- `requestingAddress` - by default the REST endpoint splunkversioncontrol_rest_restore will make a HTTPS call back to the calling IP address, this overrides the address to call back, the default of False results in a call back to the requesting IP address which is used in most use cases 
+- `requestingAddress` - by default the REST endpoint `splunkversioncontrol_rest_restore` will make a HTTPS call back to the calling IP address, this overrides the address to call back, the default of False results in a call back to the requesting IP address which is used in most use cases 
 - `splunk_vc_ko_query`, should be configured to point to an appname:searchname, the default is `splunk_kom:splunk_vc_kom_audit_summary`
 
 ## Configuring the macro & savedsearch to work with the run_ko_query option
@@ -236,6 +254,11 @@ If the issue relates to restoration, ensure that the user configured for the res
 For further information also refer to the Security Concerns section of this document. 
 
 Finally the log files are mentioned under the "Where are the logs?" section of this document
+
+There is also a test file included in the bin directory it can be used with (the path will vary but this assumes you are in `$SPLUNK_HOME/etc/apps/`):
+`splunk cmd python SplunkVersionControl/bin/test_git.py -gitRepoURL "git@github..."`
+
+To test if the git/SSH setup is working as expected
 
 ### Problems with the Splunk Version Control Restore or Splunk Version Control Backup modular input
 Both inputs follow a similar validation process:
@@ -277,9 +300,9 @@ Finally, I found that the git temporary directory often fails to delete on Windo
 
 ## Can I use this on a Splunk Cloud instance?
 
-This application, no. But this application can be used to backup a SplunkCloud instance from a remote Splunk instance, the same remote instance could also be used to restore to the SplunkCloud instance.
+This application, no. But this application can be used to backup a SplunkCloud instance from a remote/on-prem Splunk instance, the same remote instance could also be used to restore to the SplunkCloud instance.
 
-To do this you will need to install Version Control For SplunkCloud on your SplunkCloud instance, and setup this application on a remote instance configuring an interval for both the Splunk Version Control Backup and Splunk Version Control Restore modular inputs
+To do this you will need to install Version Control For SplunkCloud on your SplunkCloud instance, and setup this application on a remote/on-prem instance by configuring an interval for both the Splunk Version Control Backup and Splunk Version Control Restore modular inputs
 
 ## SplunkBase Link
 [VersionControl For Splunk](https://splunkbase.splunk.com/app/4355)
@@ -292,6 +315,20 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
 ## Release Notes
+### 1.2.9
+New features:
+- Added wildcard support for restores, so restore a savedsearch of `Test*` will now restore any savedsearch starting with Test, wildcards can be used on any knowledge object
+- Created a new file called `test_git.py`
+
+Updates:
+- Re-factored `splunkversioncontrol_restore_class.py`
+- Added more debug logging in case something does fail on restoration
+- Updated the savedsearches for the `_audit` index query to look for info=completed as well as info=granted, as this does not appear in Splunk 9
+- Added more time for the `_audit` log entry to appear, previously it would appear on the same second the dashboard was run, now there is an approx 10 second delay
+
+Library updates:
+- Updated Splunk python SDK to 1.7.2
+
 ### 1.2.8
 Updated README.md
 Updated Splunk python SDK to 1.6.20
