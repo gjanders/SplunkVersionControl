@@ -9,6 +9,7 @@ import xml.dom.minidom, xml.sax.saxutils
 import platform
 from splunkversioncontrol_backup_class import SplunkVersionControlBackup
 from splunkversioncontrol_utility import runOSProcess, get_password
+import urllib3
 
 """
 
@@ -17,6 +18,8 @@ from splunkversioncontrol_utility import runOSProcess, get_password
    to restore the knowledge object if it was deleted/changed to the filesystem
 
 """
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #Define the XML scheme for the inputs page
 SCHEME = """<scheme>
@@ -313,7 +316,7 @@ def validate_arguments():
         srcUsername = val_data['srcUsername']
         srcPassword = val_data['srcPassword']
         if srcPassword.find("password:") == 0:
-            srcPassword = get_password(srcPassword[9:], session_key, logger)
+            srcPassword = get_password(srcPassword[9:], session_key, logger, sslVerify)
 
         proxies = {}
         if 'proxy' in val_data:
@@ -322,7 +325,7 @@ def validate_arguments():
                 start = proxies['https'].find("password:") + 9
                 end = proxies['https'].find("@")
                 logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
-                temp_password = get_password(proxies['https'][start:end], session_key, logger)
+                temp_password = get_password(proxies['https'][start:end], session_key, logger, sslVerify)
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         try:
@@ -346,7 +349,7 @@ def validate_arguments():
             start = gitRepoURL.find("password:") + 9
             end = gitRepoURL.find("@")
             logger.debug("Attempting to replace gitRepoURL=%s by subsituting=%s with a password" % (gitRepoURL, gitRepoURL[start:end]))
-            git_password = get_password(gitRepoURL[start:end], session_key, logger)
+            git_password = get_password(gitRepoURL[start:end], session_key, logger, sslVerify)
             gitRepoURL = gitRepoURL[0:start-9] + git_password + gitRepoURL[end:]
     else:
         gitRepoHTTP = False
@@ -358,7 +361,7 @@ def validate_arguments():
             start = git_proxies['https'].find("password:") + 9
             end = git_proxies['https'].find("@")
             logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
-            temp_password = get_password(git_proxies['https'][start:end], session_key, logger)
+            temp_password = get_password(git_proxies['https'][start:end], session_key, logger, sslVerify)
             git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
     if gitRepoHTTP and len(git_proxies) > 0:

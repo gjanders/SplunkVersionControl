@@ -16,6 +16,7 @@ import shutil
 from io import open
 import platform
 import hashlib
+import urllib3
 from splunkversioncontrol_utility import runOSProcess, get_password
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
@@ -29,6 +30,8 @@ from unidiff import PatchSet
    to restore the knowledge object if it was deleted/changed to the filesystem
 
 """
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -233,6 +236,7 @@ class SplunkVersionControlBackup:
                     elif innerChild.tag.endswith("content"):
 
                         # optimisation to deal with the giant display.visualizations... on savedsearches only
+                        # an improved version of this optimisation may be to use /services/properties/savedsearches/default and to filter out *all* default parameters for searches
                         skip_visualizations = True
 
                         for theAttribute in innerChild[0]:
@@ -374,7 +378,8 @@ class SplunkVersionControlBackup:
                     if sharing not in infoList:
                         infoList[sharing] = []
 
-                    #REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
+                    # REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
+                    # however this might instead work on /services/properties/... or /services/configs/conf-... endpoints, to be tested if the requirement comes up
                     if type == "fieldtransformations" and "FORMAT" in info and info["FORMAT"] == "nullQueue":
                         logger.info("i=\"%s\" Dropping the backup of name=\"%s\" of type=%s in app context app=%s with owner=%s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (self.stanzaName, info["name"], type, app, info["owner"]))
                     else:
@@ -949,7 +954,7 @@ class SplunkVersionControlBackup:
     ###########################
     def savedsearches(self, app):
         ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time", "qualifiedSearch" ]
-
+        # TODO /services/properties/savedsearches/default could be used to further filter out "default" values going into the git backup
         return self.runQueries(app, "/saved/searches", "savedsearches", ignoreList, extra_args="&listDefaultActionArgs=false")
 
     ###########################
@@ -1437,6 +1442,17 @@ class SplunkVersionControlBackup:
 
         self.session_key = config['session_key']
 
+        if 'sslVerify' in config:
+            if config['sslVerify'].lower() == 'true' or config['sslVerify'] == "1":
+                self.sslVerify = True
+                logger.debug('sslverify set to boolean True from: ' + config['sslVerify'])
+            elif config['sslVerify'].lower() == 'false' or config['sslVerify'] == "0":
+                self.sslVerify = False
+                logger.debug('sslverify set to boolean False from: ' + config['sslVerify'])
+            else:
+                self.sslVerify = config['sslVerify']
+                logger.debug('sslverify set to: ' + config['sslVerify'])
+
         self.git_password = False
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
@@ -1446,7 +1462,7 @@ class SplunkVersionControlBackup:
                 start = self.gitRepoURL.find("password:") + 9
                 end = self.gitRepoURL.find("@")
                 logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
-                self.git_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.git_password = get_password(self.gitRepoURL[start:end], self.session_key, logger, self.sslVerify)
                 self.gitRepoURL = self.gitRepoURL[0:start-9] + self.git_password + self.gitRepoURL[end:]
             else:
                 self.gitRepoURL_logsafe = self.gitRepoURL
@@ -1495,7 +1511,7 @@ class SplunkVersionControlBackup:
                 start = proxies['https'].find("password:") + 9
                 end = proxies['https'].find("@")
                 logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
-                temp_password = get_password(proxies['https'][start:end], self.session_key, logger)
+                temp_password = get_password(proxies['https'][start:end], self.session_key, logger, self.sslVerify)
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         self.proxies = proxies
@@ -1507,21 +1523,10 @@ class SplunkVersionControlBackup:
                 start = git_proxies['https'].find("password:") + 9
                 end = git_proxies['https'].find("@")
                 logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
-                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger)
+                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger, self.sslVerify)
                 git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
         self.git_proxies = git_proxies
-
-        if 'sslVerify' in config:
-            if config['sslVerify'].lower() == 'true' or config['sslVerify'] == "1":
-                self.sslVerify = True
-                logger.debug('sslverify set to boolean True from: ' + config['sslVerify'])
-            elif config['sslVerify'].lower() == 'false' or config['sslVerify'] == "0":
-                self.sslVerify = False
-                logger.debug('sslverify set to boolean False from: ' + config['sslVerify'])
-            else:
-                self.sslVerify = config['sslVerify']
-                logger.debug('sslverify set to: ' + config['sslVerify'])
 
         self.file_per_ko = False
         if 'file_per_ko' in config:
@@ -1552,7 +1557,7 @@ class SplunkVersionControlBackup:
         headers={'Authorization': 'Splunk %s' % config['session_key']}
 
         url = 'https://localhost:8089/services/shcluster/captain/info?output_mode=json'
-        res = requests.get(url, headers=headers, verify=False)
+        res = requests.get(url, headers=headers, verify=self.sslVerify)
         if (res.status_code == 503):
             logger.debug("i=\"%s\" Non-shcluster / standalone instance, safe to run on this node" % (self.stanzaName))
         elif (res.status_code != requests.codes.ok):
@@ -1567,7 +1572,7 @@ class SplunkVersionControlBackup:
                 logger.info("i=\"%s\" we are on the captain node, running" % (self.stanzaName))
 
         if not useLocalAuth and self.srcPassword.find("password:") == 0:
-            self.srcPassword = get_password(self.srcPassword[9:], self.session_key, logger)
+            self.srcPassword = get_password(self.srcPassword[9:], self.session_key, logger, self.sslVerify)
 
         if 'appsList' in config and config['appsList']!="":
             appList = [app.strip() for app in config['appsList'].split(',')]
@@ -1876,7 +1881,7 @@ class SplunkVersionControlBackup:
                 if len(self.git_proxies) > 0 and self.gitRepoHTTP:
                     push_str = "export HTTPS_PROXY=" + self.git_proxies["https"] + " ; " + push_str
                 (output, stderrout, res) = runOSProcess(push_str, logger, timeout=300, shell=True)
-                res=True
+                #res=True
             if res == False:
                 if not self.show_passwords and self.git_password:
                     output = output.replace(self.git_password, "password_removed")

@@ -10,6 +10,7 @@ import time
 import calendar
 import sys
 import splunk.rest
+import urllib3
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
@@ -18,6 +19,8 @@ from splunklib import six
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "bin"))
 from splunkversioncontrol_restore_class import SplunkVersionControlRestore
 from splunkversioncontrol_utility import get_password
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -124,22 +127,6 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 pass
             elif useLocalAuth.lower() == 't' or useLocalAuth.lower() == "true":
                 useLocalAuth = True
-        if not useLocalAuth:
-            if not 'destUsername' in json_dict or not 'destPassword' in json_dict or not 'destURL' in json_dict:
-                logger.error("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
-                self.response.write("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
-                return
-            destUsername = json_dict['destUsername']
-            destPassword = json_dict['destPassword']
-            if destPassword.find("password:") == 0:
-                destPassword = get_password(destPassword[9:], self.request['systemAuth'], logger)            
-        else:
-            if not 'destURL' in json_dict:
-                logger.error("Missing one of destURL from the splunk version control restore stanza, invalid configuration")
-                self.response.write("Missing destURL from the splunk version control restore stanza, invalid configuration")
-                return
-
-        destURL = json_dict['destURL']
 
         sslVerify = False
         if 'sslVerify' in json_dict:
@@ -157,6 +144,23 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             else:
                 sslVerify = sslVerifyValue
                 logger.debug('sslverify set to: %s' % (sslVerifyValue))
+
+        if not useLocalAuth:
+            if not 'destUsername' in json_dict or not 'destPassword' in json_dict or not 'destURL' in json_dict:
+                logger.error("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
+                self.response.write("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
+                return
+            destUsername = json_dict['destUsername']
+            destPassword = json_dict['destPassword']
+            if destPassword.find("password:") == 0:
+                destPassword = get_password(destPassword[9:], self.request['systemAuth'], logger, sslVerify)
+        else:
+            if not 'destURL' in json_dict:
+                logger.error("Missing one of destURL from the splunk version control restore stanza, invalid configuration")
+                self.response.write("Missing destURL from the splunk version control restore stanza, invalid configuration")
+                return
+
+        destURL = json_dict['destURL']
 
         headers = {}
         auth = None
@@ -232,7 +236,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             headers = { "Authorization" : "Splunk " + self.request['systemAuth'] }
             curtime = calendar.timegm(time.gmtime())
             url = "https://localhost:8089/servicesNS/nobody/" + remoteAppName + "/storage/collections/data/splunkversioncontrol_rest_restore_status"
-            res = self.runHttpRequest(url, headers, None, "get", "checking kvstore collection splunkversioncontrol_rest_restore_status", sslVerify=False)
+            res = self.runHttpRequest(url, headers, None, "get", "checking kvstore collection splunkversioncontrol_rest_restore_status", sslVerify=sslVerify)
             if not res:
                 return
 
@@ -242,14 +246,14 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             if not len(res) == 0:
                 if not 'start_time' in res[0]:
                     logger.warn("Warning invalid kvstore data, will wipe it and continue in collection splunkversioncontrol_rest_restore_status on url=%s, value returned res=\"%s\"" % (url, payload))
-                    self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status', sslVerify=False)
+                    self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status', sslVerify=sslVerify)
                 else:
                     kvstore_start_time = res[0]['start_time']
                     target_time = curtime - time_wait
                     if kvstore_start_time < target_time:
                         logger.warn("Found existing entry from %s but time is %s, this is past the limit of current time minus %s (%s)" % (kvstore_start_time, curtime, time_wait, target_time))
                         #More than 10 minutes ago, delete the entry and move on
-                        self.runHttpRequest(url, headers, None, "delete", "wiping kvstore splunkversioncontrol_rest_restore_status due to record %s older than %s time period" % (kvstore_start_time, target_time), sslVerify=False)
+                        self.runHttpRequest(url, headers, None, "delete", "wiping kvstore splunkversioncontrol_rest_restore_status due to record %s older than %s time period" % (kvstore_start_time, target_time), sslVerify=sslVerify)
                     else:
                         removal_target = kvstore_start_time + time_wait + 1
                         logger.warn("Attempted to run but found a running restore instance with time=%s and current_time=%s, will delete and move on after current_time_minus=%s seconds (override_time=%s)" % (kvstore_start_time, curtime, time_wait, removal_target))
@@ -260,7 +264,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             payload = json.dumps({ 'start_time': curtime })
             headers['Content-Type'] = 'application/json'
             #update kvstore with runtime
-            res = self.runHttpRequest(url, headers, payload, 'post', 'updating kvstore collection splunkversioncontrol_rest_restore_status', sslVerify=False)
+            res = self.runHttpRequest(url, headers, payload, 'post', 'updating kvstore collection splunkversioncontrol_rest_restore_status', sslVerify=sslVerify)
             if not res:
                 return
 
@@ -272,7 +276,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 self.response.write("Restore has failed to complete successfully in app %s, object of type %s, with name %s, from tag %s, scope %s with restoreAsUser %s and your username of %s. Message is %s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))
                 logger.warn("Restore has failed to complete successfully in app=%s, object of type=%s, with name=%s, from tag=%s, scope=%s with restoreAsUser=%s and requested by username=%s, message=%s" % (app, obj_type, obj_name, tag, scope, restoreAsUser, username, message))
 
-            self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run', sslVerify=False)
+            self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run', sslVerify=sslVerify)
 
     #Run a Splunk query via the search/jobs endpoint
     def runSearchJob(self, url, appname, headers, auth, username, earliest_time, sslVerify=False):

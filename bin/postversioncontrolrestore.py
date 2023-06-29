@@ -6,12 +6,15 @@ import requests
 import re
 import logging
 from logging.config import dictConfig
+import urllib3
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration, Option
 from splunklib.searchcommands.validators import Validator, Boolean
 from splunklib.binding import HTTPError
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class OrValidator(Validator):
     def __init__(self, a, b):

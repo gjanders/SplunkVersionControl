@@ -6,10 +6,12 @@ import requests
 import os
 import sys
 import traceback
+import urllib3
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib import six
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #Based on https://stackoverflow.com/questions/1191374/using-module-subprocess-with-timeout
 def runOSProcess(command, logger, timeout=60, shell=True):
@@ -68,7 +70,7 @@ def get_password(password, session_key, logger, sslVerify=False):
     url = "https://localhost:8089/servicesNS/-/" + context + "/storage/passwords?output_mode=json&f=clear_password&search=" + password
     logger.debug("Trying url=%s with session_key to obtain name=%s" % (url, password))
     headers = {'Authorization': 'Splunk %s' % session_key}
-    res = requests.get(url, headers=headers, verify=False)
+    res = requests.get(url, headers=headers, verify=sslVerify)
     dict = json.loads(res.text)
     clear_password = False
     if not 'entry' in dict:
@@ -86,7 +88,7 @@ def get_password(password, session_key, logger, sslVerify=False):
 
     url = "https://localhost:8089/servicesNS/-/-/storage/passwords?output_mode=json&f=clear_password&count=0&search=" + password
     logger.debug("Trying url=%s with session_key to obtain name=%s" % (url, password))
-    res = requests.get(url, headers=headers, verify=False)
+    res = requests.get(url, headers=headers, verify=sslVerify)
     dict = json.loads(res.text)
     if not 'entry' in dict:
         logger.warn("dict=%s did not contain the entries expected on url=%s while looking for password=%s" % (dict, url, password))

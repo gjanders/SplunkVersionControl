@@ -314,7 +314,26 @@ To do this you will need to install Version Control For SplunkCloud on your Splu
 
 [SplunkVersionControlCloud github](https://github.com/gjanders/SplunkVersionControlCloud)
 
+## How does this compare with other version control apps for Splunk?
+As of October 2022, there are still no signs of version control within the Splunk Enterprise (or cloud) product, however you do have a few options in terms of a version control app, these include:
+- [Git Version Control for Splunk](https://splunkbase.splunk.com/app/4182) - this app provides a modular input to help with getting configuration into a git repository from the filesystem. Note: on-prem instances only, no Splunk Cloud support.
+- [FN1315 - Cover Your Assets: Protect Your Knowledge Objects from Yourself (and Others) - A Paychex story github](https://github.com/paychex/Splunk.Conf19) - this git location provides a list of searches that produce curl commands you can use to restore objects. This can work on-prem or in Splunk Cloud
+- [Splunk2Git](https://github.com/paychex/splunk-python/tree/main/Splunk2Git) - Paychex's script to move Splunk knowledge objects into git using REST API
+- [Version Control for Splunk (this app)](https://splunkbase.splunk.com/app/4355) - this app uses the REST API to download configuration and store inside a git repository in JSON format. Supports restoration of objects via dashboard (no admin support required). This can work on-prem or on Splunk Cloud remotely (this app runs on prem)
+- [VersionControl for SplunkCloud](https://splunkbase.splunk.com/app/5061) - these are the dashboards and savedsearches that are installed on the SplunkCloud instance to support the version control app running remotely
+- [Search Head Backup](https://splunkbase.splunk.com/app/6438) - backup to an index, works in Splunk Cloud
+
 ## Release Notes
+### 1.2.10
+Updates:
+- Disabled urllib3 warnings
+- Added timeout=0 on `SplunkVersionControl ChangeDetector Directory` savedsearch
+- Added some minor comments about `/services/properties/savedsearches/default` (no changes in this version)
+- Updated various internal calls to use sslVerify setting. Hopefully nothing will break but this will result in more SSL verification in various parts of the code
+
+Library updates:
+- Updated Splunk python SDK to 1.7.3
+
 ### 1.2.9
 New features:
 - Added wildcard support for restores, so restore a savedsearch of `Test*` will now restore any savedsearch starting with Test, wildcards can be used on any knowledge object

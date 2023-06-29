@@ -17,6 +17,7 @@ from io import open
 import platform
 import hashlib
 import fnmatch
+import urllib3
 from splunkversioncontrol_utility import runOSProcess, get_password
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
@@ -36,6 +37,7 @@ from splunklib import six
   Both versions trigger the same code to restore the actual knowledge object from git, just in different ways...
 """
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 
 #Setup the logging
@@ -892,7 +894,6 @@ class SplunkVersionControlRestore:
         else:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
 
-        #Verify=false is hardcoded to workaround local SSL issues
         res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
         objExists = False
         if (res.status_code == 404):
@@ -1349,6 +1350,24 @@ class SplunkVersionControlRestore:
 
         self.session_key = config['session_key']
 
+        if 'sslVerify' in config:
+            sslVerify = config['sslVerify']
+            if isinstance(sslVerify, bool) and sslVerify:
+                self.sslVerify = True
+                logger.debug('sslverify set to boolean True from: %s' % (sslVerify))
+            elif isinstance(sslVerify, bool) and not sslVerify:
+                self.sslVerify = False
+                logger.debug('sslverify set to boolean True from: %s' % (sslVerify))
+            elif sslVerify.lower() == 'true' or sslVerify == "1":
+                self.sslVerify = True
+                logger.debug('sslverify set to boolean True from: ' + sslVerify)
+            elif sslVerify.lower() == 'false' or sslVerify == "0":
+                self.sslVerify = False
+                logger.debug('sslverify set to boolean False from: ' + sslVerify)
+            else:
+                self.sslVerify = sslVerify
+                logger.debug('sslverify set to: %s' % (sslVerify))
+
         self.git_password = False
         # a flag for a http/https vs SSH based git repo
         if self.gitRepoURL.find("http") == 0:
@@ -1358,7 +1377,7 @@ class SplunkVersionControlRestore:
                 start = self.gitRepoURL.find("password:") + 9
                 end = self.gitRepoURL.find("@")
                 logger.debug("Attempting to replace self.gitRepoURL=%s by subsituting=%s with a password" % (self.gitRepoURL, self.gitRepoURL[start:end]))
-                self.git_password = get_password(self.gitRepoURL[start:end], self.session_key, logger)
+                self.git_password = get_password(self.gitRepoURL[start:end], self.session_key, logger, self.sslVerify)
                 self.gitRepoURL = self.gitRepoURL[0:start-9] + self.git_password + self.gitRepoURL[end:]
             else:
                 self.gitRepoURL_logsafe = self.gitRepoURL
@@ -1373,7 +1392,7 @@ class SplunkVersionControlRestore:
         logger.info("i=\"%s\" Splunk Version Control Restore run with arguments=\"%s\"" % (self.stanza_name, cleanArgs))
 
         if not useLocalAuth and self.destPassword.find("password:") == 0:
-            self.destPassword = get_password(self.destPassword[9:], self.session_key, logger)
+            self.destPassword = get_password(self.destPassword[9:], self.session_key, logger, self.sslVerify)
 
         knownAppList = []
         self.gitTempDir = config['gitTempDir']
@@ -1428,7 +1447,7 @@ class SplunkVersionControlRestore:
                 start = proxies['https'].find("password:") + 9
                 end = proxies['https'].find("@")
                 logger.debug("Attempting to replace proxy=%s by subsituting=%s with a password" % (proxies['https'], proxies['https'][start:end]))
-                temp_password = get_password(proxies['https'][start:end], self.session_key, logger)
+                temp_password = get_password(proxies['https'][start:end], self.session_key, logger, self.sslVerify)
                 proxies['https'] = proxies['https'][0:start-9] + temp_password + proxies['https'][end:]
 
         self.proxies = proxies
@@ -1440,28 +1459,10 @@ class SplunkVersionControlRestore:
                 start = git_proxies['https'].find("password:") + 9
                 end = git_proxies['https'].find("@")
                 logger.debug("Attempting to replace git_proxy=%s by subsituting=%s with a password" % (git_proxies['https'], git_proxies['https'][start:end]))
-                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger)
+                temp_password = get_password(git_proxies['https'][start:end], self.session_key, logger, self.sslVerify)
                 git_proxies['https'] = git_proxies['https'][0:start-9] + temp_password + git_proxies['https'][end:]
 
         self.git_proxies = git_proxies
-
-        if 'sslVerify' in config:
-            sslVerify = config['sslVerify']
-            if isinstance(sslVerify, bool) and sslVerify:
-                self.sslVerify = True
-                logger.debug('sslverify set to boolean True from: %s' % (sslVerify))
-            elif isinstance(sslVerify, bool) and not sslVerify:
-                self.sslVerify = False
-                logger.debug('sslverify set to boolean True from: %s' % (sslVerify))
-            elif sslVerify.lower() == 'true' or sslVerify == "1":
-                self.sslVerify = True
-                logger.debug('sslverify set to boolean True from: ' + sslVerify)
-            elif sslVerify.lower() == 'false' or sslVerify == "0":
-                self.sslVerify = False
-                logger.debug('sslverify set to boolean False from: ' + sslVerify)
-            else:
-                self.sslVerify = sslVerify
-                logger.debug('sslverify set to: %s' % (sslVerify))
 
         self.file_per_ko = False
         if 'file_per_ko' in config:
