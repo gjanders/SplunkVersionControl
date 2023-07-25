@@ -16,8 +16,10 @@ import shutil
 from io import open
 import platform
 import hashlib
-import urllib3
 from splunkversioncontrol_utility import runOSProcess, get_password
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib import six
@@ -30,8 +32,6 @@ from unidiff import PatchSet
    to restore the knowledge object if it was deleted/changed to the filesystem
 
 """
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -142,10 +142,19 @@ class SplunkVersionControlBackup:
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
 
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
-        if (res.status_code != requests.codes.ok):
+        success = False
+        for _ in range(5):
+            res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+            if (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" Could not obtain a list of all apps, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
+                continue
+            else:
+                success = True
+                break
+
+        if not success:
             logger.fatal("i=\"%s\" Could not obtain a list of all apps, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
-            sys.exit(-1)
+            sys.exit(1)
 
         #Splunk returns data in XML format, use the element tree to work through it
         root = ET.fromstring(res.text)
@@ -195,10 +204,17 @@ class SplunkVersionControlBackup:
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
 
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
-        if (res.status_code != requests.codes.ok):
-            logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
+        success = False
+        for _ in range(5):
+            res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+            if (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
+            else:
+                success = True
+                break
 
+        if not success:
+            logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
         #Splunk returns data in XML format, use the element tree to work through it
         root = ET.fromstring(res.text)
 
@@ -378,7 +394,7 @@ class SplunkVersionControlBackup:
                     if sharing not in infoList:
                         infoList[sharing] = []
 
-                    # REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
+                    #REST API does not support the creation of null queue entries as tested in 7.0.5 and 7.2.1, these are also unused on search heads anyway so ignoring these with a warning
                     # however this might instead work on /services/properties/... or /services/configs/conf-... endpoints, to be tested if the requirement comes up
                     if type == "fieldtransformations" and "FORMAT" in info and info["FORMAT"] == "nullQueue":
                         logger.info("i=\"%s\" Dropping the backup of name=\"%s\" of type=%s in app context app=%s with owner=%s because nullQueue entries cannot be created via REST API (and they are not required in search heads)" % (self.stanzaName, info["name"], type, app, info["owner"]))
@@ -535,9 +551,15 @@ class SplunkVersionControlBackup:
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
 
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+        for _ in range(5):
+            res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+            if (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
+            else:
+                break
+
         if (res.status_code != requests.codes.ok):
-            logger.warn("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
+            logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
             return None
 
         res = json.loads(res.text)
@@ -606,7 +628,7 @@ class SplunkVersionControlBackup:
                     end = line.find(" ",start)+1
                 else:
                     start = start + 7
-                file2 = line[start:end-1]
+                file2 = line[start+7:end-1]
             # this file has been deleted
             elif line.find("{+++ /dev/null") == 0:
                 if file!="":
@@ -645,8 +667,8 @@ class SplunkVersionControlBackup:
             logger.warn("i=\"%s\" no results field found in returned results \"%s\" tag=%s" % (self.stanzaName, results, tag))
             return
 
-        file_list, dir_list = self.list_dir_contents(self.gitTempDir)
         str = ""
+        file_list, dir_list = self.list_dir_contents(self.gitTempDir)
         for a_result in results['results']:
             stanza = "i=\"%s\" " % (self.stanzaName)
             str = "%s%s" % (str, stanza)
@@ -672,7 +694,7 @@ class SplunkVersionControlBackup:
                     if self.file_per_ko:
                         if not 'ko_name' in a_result:
                             logger.info("i=\"%s\" ko_name is null, cannot identify an exact changed object \"%s\" tag=%s" % (self.stanzaName, a_result, tag))
-                            overall_matches_list = []                        
+                            overall_matches_list = []
                             if 'user' in a_result:
                                 #TODO may not work on Windows
                                 find_str = "/" + a_result['user'] + "/"
@@ -681,7 +703,7 @@ class SplunkVersionControlBackup:
                                 find_str = a_result['ko_type']
                                 overall_matches_list = [ entry[0:entry.find(find_str)+len(find_str)] for entry in overall_matches if entry.find(find_str) != -1 ]
                             if len(overall_matches_list) > 0:
-                                overall_matches = overall_matches + list(set(overall_matches_list))                            
+                                overall_matches = overall_matches + list(set(overall_matches_list))
                         else:
                             file_name = self.create_file_name(a_result['ko_name'])
                             logger.debug("i=\"%s\" looking for file_name=%s tag=%s" % (self.stanzaName, file_name, tag))
@@ -765,8 +787,16 @@ class SplunkVersionControlBackup:
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
 
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
-        if (res.status_code != requests.codes.ok):
+        success = False
+        for _ in range(5):
+            res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+            if (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" Type macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
+            else:
+                success = True
+                break
+
+        if not success:
             logger.error("i=\"%s\" Type macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
 
         #Parse the XML tree
@@ -955,6 +985,7 @@ class SplunkVersionControlBackup:
     def savedsearches(self, app):
         ignoreList = [ "embed.enabled", "triggered_alert_count", "next_scheduled_time", "qualifiedSearch" ]
         # TODO /services/properties/savedsearches/default could be used to further filter out "default" values going into the git backup
+
         return self.runQueries(app, "/saved/searches", "savedsearches", ignoreList, extra_args="&listDefaultActionArgs=false")
 
     ###########################
@@ -1114,9 +1145,19 @@ class SplunkVersionControlBackup:
             headers = {'Authorization': 'Splunk %s' % self.session_key }
         else:
             auth = HTTPBasicAuth(self.srcUsername, self.srcPassword)
-        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=data, proxies=self.proxies)
-        if (res.status_code != requests.codes.ok):
+
+        success = False
+        for _ in range(5):
+            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=data, proxies=self.proxies)
+            if (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
+            else:
+                success = True
+                break
+
+        if not success:
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
+
         res = json.loads(res.text)
 
         #Log return messages from Splunk, often these advise of an issue but not always...
@@ -1919,3 +1960,4 @@ class SplunkVersionControlBackup:
             shutil.rmtree(self.gitTempDir)
 
         logger.info("i=\"%s\" Done" % (self.stanzaName))
+
