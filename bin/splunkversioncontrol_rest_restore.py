@@ -11,6 +11,7 @@ import calendar
 import sys
 import splunk.rest
 import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
@@ -19,8 +20,6 @@ from splunklib import six
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "bin"))
 from splunkversioncontrol_restore_class import SplunkVersionControlRestore
 from splunkversioncontrol_utility import get_password
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 #Setup the logging
@@ -127,6 +126,22 @@ class SVCRestore(splunk.rest.BaseRestHandler):
                 pass
             elif useLocalAuth.lower() == 't' or useLocalAuth.lower() == "true":
                 useLocalAuth = True
+        if not useLocalAuth:
+            if not 'destUsername' in json_dict or not 'destPassword' in json_dict or not 'destURL' in json_dict:
+                logger.error("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
+                self.response.write("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
+                return
+            destUsername = json_dict['destUsername']
+            destPassword = json_dict['destPassword']
+            if destPassword.find("password:") == 0:
+                destPassword = get_password(destPassword[9:], self.request['systemAuth'], logger)
+        else:
+            if not 'destURL' in json_dict:
+                logger.error("Missing one of destURL from the splunk version control restore stanza, invalid configuration")
+                self.response.write("Missing destURL from the splunk version control restore stanza, invalid configuration")
+                return
+
+        destURL = json_dict['destURL']
 
         sslVerify = False
         if 'sslVerify' in json_dict:
@@ -144,23 +159,6 @@ class SVCRestore(splunk.rest.BaseRestHandler):
             else:
                 sslVerify = sslVerifyValue
                 logger.debug('sslverify set to: %s' % (sslVerifyValue))
-
-        if not useLocalAuth:
-            if not 'destUsername' in json_dict or not 'destPassword' in json_dict or not 'destURL' in json_dict:
-                logger.error("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
-                self.response.write("Missing one of destUsername, destPassword or destURL from the splunk version control restore stanza, and useLocalAuth is not true, invalid configuration")
-                return
-            destUsername = json_dict['destUsername']
-            destPassword = json_dict['destPassword']
-            if destPassword.find("password:") == 0:
-                destPassword = get_password(destPassword[9:], self.request['systemAuth'], logger, sslVerify)
-        else:
-            if not 'destURL' in json_dict:
-                logger.error("Missing one of destURL from the splunk version control restore stanza, invalid configuration")
-                self.response.write("Missing destURL from the splunk version control restore stanza, invalid configuration")
-                return
-
-        destURL = json_dict['destURL']
 
         headers = {}
         auth = None
@@ -285,7 +283,13 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         logger.debug("Running requests.post() on url=%s query=\"%s\"" % (url, query))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot", "earliest_time" : earliest_time }
 
-        res = requests.post(url, auth=auth, headers=headers, verify=sslVerify, data=data)
+        for _ in range(5):
+            res = requests.post(url, auth=auth, headers=headers, verify=sslVerify, data=data)
+            if res.status_code != requests.codes.ok:
+                logger.warn("url=%s status_code=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text))
+            else:
+                break
+
         if (res.status_code != requests.codes.ok):
             logger.error("url=%s status_code=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text))
             return { "error": "url=%s status_code=%s reason=%s, response=\"%s\"" % (url, res.status_code, res.reason, res.text) }
@@ -302,15 +306,22 @@ class SVCRestore(splunk.rest.BaseRestHandler):
         return res
 
     def runHttpRequest(self, url, headers, data, obj_type, text, sslVerify=False):
-        if obj_type == "delete":
-            res = requests.delete(url, headers=headers, verify=sslVerify)
-        elif obj_type == "post":
-            res = requests.post(url, headers=headers, verify=sslVerify, data=data)
-        elif obj_type == "get":
-            res = requests.get(url, headers=headers, verify=sslVerify)
+        for _ in range(5):
+            if obj_type == "delete":
+                res = requests.delete(url, headers=headers, verify=sslVerify)
+            elif obj_type == "post":
+                res = requests.post(url, headers=headers, verify=sslVerify, data=data)
+            elif obj_type == "get":
+                res = requests.get(url, headers=headers, verify=sslVerify)
+
+            if res.status_code != requests.codes.ok and res.status_code != 201:
+                logger.warn("Unexpected response code while %s, on url=%s, statuscode=%s reason=%s, response=\"%s\", payload=\"%s\", verify=\"%s\"" % (text, url, res.status_code, res.reason, res.text, data, sslVerify))
+                continue
+            break
 
         if (res.status_code != requests.codes.ok and res.status_code != 201):
             logger.error("Unexpected response code while %s, on url=%s, statuscode=%s reason=%s, response=\"%s\", payload=\"%s\", verify=\"%s\"" % (text, url, res.status_code, res.reason, res.text, data, sslVerify))
+
             self.response.write("Error unexpected response code while %s, on url %s, statuscode %s reason %s, response \"%s\", payload=\"%s\", verify=\"%s\"" % (text, url, res.status_code, res.reason, res.text, data, sslVerify))
             return
 
