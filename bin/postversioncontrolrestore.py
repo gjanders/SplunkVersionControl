@@ -6,15 +6,12 @@ import requests
 import re
 import logging
 from logging.config import dictConfig
-import urllib3
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration, Option
 from splunklib.searchcommands.validators import Validator, Boolean
 from splunklib.binding import HTTPError
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class OrValidator(Validator):
     def __init__(self, a, b):
@@ -60,7 +57,7 @@ logging_config = dict(
               'maxBytes' :  2097152,
               'level': logging.DEBUG,
               'backupCount' : 5 }
-        },        
+        },
     root = {
         'handlers': ['h','file'],
         'level': logging.DEBUG,
@@ -92,7 +89,7 @@ class SVCPostRestore(GeneratingCommand):
     timeout = Option(require=True)
     sslVerify = Option(require=False, default=False, validate=OrValidator(Boolean(), Filename()))
     requestingAddress = Option(require=False, default=False)
-    
+
     def generate(self):
         """
           The logic is:
@@ -109,7 +106,7 @@ class SVCPostRestore(GeneratingCommand):
             logger.error("Requested to post to remote url=%s but this did not match the regex" % (self.url))
             yield {'result': 'Invalid url passed in, url must begin with https:// and would normally end in :8089/services/splunkversioncontrol_rest_restore, url=%s' % (self.url) }
             return
-        
+
         body = {}
         body['splunk_vc_name'] = self.splunk_vc_name
         body['app'] = self.app
@@ -121,14 +118,19 @@ class SVCPostRestore(GeneratingCommand):
         body['timeout'] = self.timeout
         if self.requestingAddress:
             body['requestingAddress'] = self.requestingAddress
-        
+
         logger.info("Attempting POST request to url=%s with body=\"%s\"" % (url, body))
-        
+
         body['Authorization'] = 'Splunk ' + self._metadata.searchinfo.session_key
-        
+
         logger.debug("Using token %s" % (body['Authorization']))
-        
-        attempt = requests.post(url, verify=self.sslVerify, data=body)
+
+        for _ in range(5):
+            attempt = requests.post(url, verify=self.sslVerify, data=body)
+            if attempt.status_code != requests.codes.ok:
+                logger.warn("POST request failed with status_code=%s, reason=%s, text=%s on url=%s" % (attempt.status_code, attempt.reason, attempt.text, url))
+                continue
+            break
         if attempt.status_code != 200:
             logger.error("POST request failed with status_code=%s, reason=%s, text=%s on url=%s" % (attempt.status_code, attempt.reason, attempt.text, url))
             yield {'result': 'Unknown failure, received a non-200 response code of %s on the url %s, reason %s, text result is %s' % (attempt.status_code, url, attempt.reason, attempt.text)}
