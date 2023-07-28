@@ -18,6 +18,7 @@ import platform
 import hashlib
 import fnmatch
 import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from splunkversioncontrol_utility import runOSProcess, get_password
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
@@ -37,7 +38,6 @@ from splunklib import six
   Both versions trigger the same code to restore the actual knowledge object from git, just in different ways...
 """
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 splunkLogsDir = os.environ['SPLUNK_HOME'] + "/var/log/splunk"
 
 #Setup the logging
@@ -297,15 +297,24 @@ class SplunkVersionControlRestore:
     ###########################
     def restore_wildcard(self, url, app, name, app_scope, user_scope, auth, headers, endpoint, user, restore_as_user, admin_level, obj_type):
         logger.info("i=\"%s\" url=%s app=%s name=%s app_scope=%s user_scope=%s" % (self.stanza_name, url, app, name, app_scope, user_scope))
-        
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
 
-        #If we get 404 something is wrong as we expect to get a list of objects of this type... 
-        if (res.status_code == 404):
-            logger.error("i=\"%s\" URL=%s is throwing a 404, this should not happen with the all objects endpoint" % (self.stanza_name, url))
-            return
-        elif (res.status_code != requests.codes.ok):
-            logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanza_name, url, app, res.status_code, res.reason, res.text))
+        success = False
+        for _ in range(5):
+            res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+
+            #If we get 404 something is wrong as we expect to get a list of objects of this type...
+            if (res.status_code == 404):
+                logger.error("i=\"%s\" URL=%s is throwing a 404, this should not happen with the all objects endpoint" % (self.stanza_name, url))
+                break
+            elif (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanza_name, url, app, res.status_code, res.reason, res.text))
+                continue
+            success = True
+            break
+
+        if not success:
+            if res.status_code != requests.codes.ok:
+                logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanza_name, url, app, res.status_code, res.reason, res.text))
             return
 
         logger.debug("i=\"%s\" Attempting to JSON loads on (retore_wildcard) %s" % (self.stanza_name, res.text))
@@ -328,7 +337,7 @@ class SplunkVersionControlRestore:
                 elif app_context == app and user_scope == True and sharing_level == "user":
                     obj_exists_dict['user'].append(entry_name)
                     logger.debug("i=\"%s\" Adding name=%s into obj_exists_dict at user scope app_context=%s" % (self.stanza_name, entry_name, app_context))
-        
+
         overall_res = False
         overall_msg = ""
         #We need to work with user scope
@@ -367,7 +376,14 @@ class SplunkVersionControlRestore:
     #
     ###########################
     def restore_standard(self, url, app, name, app_scope, user_scope, auth, headers, endpoint, user, restore_as_user, admin_level, obj_type):
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+
+        for _ in range(5):
+            res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+
+            if (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanza_name, url, app, res.status_code, res.reason, res.text))
+                continue
+            break
 
         obj_exists = False
 
@@ -417,7 +433,7 @@ class SplunkVersionControlRestore:
             if return_res:
                 overall_res = True
                 overall_msg = overall_msg + " " + return_message + "\n"
-        
+
         # if restore succeeded at any level
         if overall_res:
             logger.info("i=\"%s\" user=%s restore has run successfully for name=%s, type=%s, restore_as_user=%s, admin_level=%s" % (self.stanza_name, user, name, obj_type, restore_as_user, admin_level))
@@ -512,7 +528,7 @@ class SplunkVersionControlRestore:
                             if config_item['name'] == name or ('origName' in config_item and config_item['origName'] == name):
                                 #We found the config_item we need, run the restoration
                                 logger.debug("i=\"%s\" user=%s, name=%s is found, dictionary is %s" % (self.stanza_name, user, name, config_item))
-                                
+
                                 # run the restoration
                                 logger.debug("Attempting to runRestore for config=%s, obj_type=%s, endpoint=%s, app=%s, name=%s, user=%s, restore_as_user=%s, admin_level=%s, obj_exists=%s" % (config_item, obj_type, endpoint, app, name, user, restore_as_user, admin_level, obj_exists))
                                 restore_result, message = self.runRestore(config_item, obj_type, endpoint, app, name, user, restore_as_user, admin_level, obj_exists)
@@ -662,7 +678,11 @@ class SplunkVersionControlRestore:
             objExistsURL = "%s/%s?output_mode=json" % (url, origName)
             logger.debug("i=\"%s\" URL=%s re-checking object exists URL due to name override from %s to original name of %s proxies_length=%s" % (self.stanza_name, objExistsURL, name, origName, len(self.proxies)))
             #Verify=false is hardcoded to workaround local SSL issues
-            res = requests.get(objExistsURL, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+            for _ in range(5):
+                res = requests.get(objExistsURL, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+                if res.status_code != requests.codes.ok:
+                    logger.warn("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanza_name, objExistsURL, app, res.status_code, res.reason, res.text))
+                    continue
 
             #If we get 404 it definitely does not exist or it has a name override
             if (res.status_code == 404):
@@ -713,14 +733,25 @@ class SplunkVersionControlRestore:
             del payload['disabled']
 
         logger.debug("i=\"%s\" Attempting to %s type=%s with name=%s on URL=%s with payload=\"%s\" in app=%s proxies_length=%s" % (self.stanza_name, createOrUpdate, obj_type, name, url, payload, app, len(self.proxies)))
-        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+        for _ in range(5):
+            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+            if res.status_code == 502:
+                logger.warn("i=\"%s\" user=%s, name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanza_name, user, name, obj_type, url, res.status_code,         res.reason, res.text, app, owner))
+            else:
+                break
+
         if (res.status_code != requests.codes.ok and res.status_code != 201):
             logger.error("i=\"%s\" user=%s, name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanza_name, user, name, obj_type, url, res.status_code, res.reason, res.text, app, owner))
             #Saved Searches sometimes fail due to the VSID field, auto-retry in case that solves the problem...
             if obj_type=="savedsearches":
                 if 'vsid' in payload:
                     del payload['vsid']
-                    res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+                    for _ in range(5):
+                        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+                        if res.status_code == 502:
+                            logger.warn("i=\"%s\" user=%s, re-attempted without vsid but result for name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanza_name, user, name, obj_type, url, res.status_code, res.reason, res.text, app, owner))
+                        else:
+                            break
                     if (res.status_code != requests.codes.ok and res.status_code != 201):
                         logger.error("i=\"%s\" user=%s, re-attempted without vsid but result for name=%s of type=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", in app=%s, owner=%s" % (self.stanza_name, user, name, obj_type, url, res.status_code, res.reason, res.text, app, owner))
                         result = False
@@ -756,7 +787,12 @@ class SplunkVersionControlRestore:
             url = "%s/acl" % (objURL)
             payload = { "owner": owner, "sharing" : sharing }
             logger.info("i=\"%s\" Attempting to change ownership of type=%s with name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanza_name, obj_type, name, url, owner, app, sharing))
-            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+            for _ in range(5):
+                res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+                if res.status_code == 502:
+                    logger.warn("i=\"%s\" user=%s, name=%s of type=%s in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (self.stanza_name, user, name, obj_type, app, url, res.status_code, res.reason, res.text, owner))
+                else:
+                    break
 
             #If re-own fails log this for investigation
             if (res.status_code != requests.codes.ok):
@@ -816,7 +852,14 @@ class SplunkVersionControlRestore:
             #servicesNS/-/search/properties/macros
             #__stanza = <name>
 
-            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+            for _ in range(5):
+                res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+                if res.status_code == 502:
+                    message = "name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (name, app, url, res.status_code, res.reason, res.text, owner)
+                    logger.warn("i=\"" + self.stanza_name + "\"" + message)
+                else:
+                    break
+
             if (res.status_code != requests.codes.ok and res.status_code != 201):
                 message = "name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s" % (name, app, url, res.status_code, res.reason, res.text, owner)
                 logger.error("i=\"" + self.stanza_name + "\"" + message)
@@ -843,7 +886,13 @@ class SplunkVersionControlRestore:
         payload = config
 
         logger.debug("i=\"%s\" Attempting to modify type=macro name=%s on URL=%s with payload=\"%s\" in app=%s proxies_length=%s" % (self.stanza_name, name, url, payload, app, len(self.proxies)))
-        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+        for _ in range(5):
+            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+            if res.status_code == 502:
+                logger.warn("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanza_name, name, app, url, res.status_code, res.reason, res.text))
+            else:
+                break
+
         if (res.status_code != requests.codes.ok and res.status_code != 201):
             logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanza_name, name, app, url, res.status_code, res.reason, res.text))
             result = False
@@ -852,7 +901,13 @@ class SplunkVersionControlRestore:
             url = "%s/servicesNS/%s/%s/configs/conf-macros/%s/acl" % (self.splunk_rest, owner, app, name)
             payload = { "owner": owner, "sharing" : sharing }
             logger.info("i=\"%s\" Attempting to change ownership of type=macro name=%s via URL=%s to owner=%s in app=%s with sharing=%s" % (self.stanza_name, name, url, owner, app, sharing))
-            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+            for _ in range(5):
+                res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=payload, proxies=self.proxies)
+                if res.status_code == 502:
+                    logger.warn("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s sharing=%s" % (self.stanza_name, name, app, url, res.status_code, res        .reason, res.text, owner, sharing))
+                else:
+                    break
+
             if (res.status_code != requests.codes.ok):
                 logger.error("i=\"%s\" name=%s of type=macro in app=%s with URL=%s statuscode=%s reason=%s, response=\"%s\", owner=%s sharing=%s" % (self.stanza_name, name, app, url, res.status_code, res.reason, res.text, owner, sharing))
             else:
@@ -894,7 +949,14 @@ class SplunkVersionControlRestore:
         else:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
 
-        res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+        #Verify=false is hardcoded to workaround local SSL issues
+        for _ in range(5):
+            res = requests.get(url, auth=auth, headers=headers, verify=self.sslVerify, proxies=self.proxies)
+            if res.status_code == 502:
+                logger.warn("i=\"%s\" type=macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanza_name, app, url, res.status_code, res.reason, res.text))
+            else:
+                break
+
         objExists = False
         if (res.status_code == 404):
             logger.debug("i=\"%s\" URL=%s is throwing a 404, assuming new object creation" % (self.stanza_name, url))
@@ -1242,9 +1304,18 @@ class SplunkVersionControlRestore:
         else:
             auth = HTTPBasicAuth(self.destUsername, self.destPassword)
 
-        res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=data, proxies=self.proxies)
-        if (res.status_code != requests.codes.ok):
+        success = False
+        for _ in range(5):
+            res = requests.post(url, auth=auth, headers=headers, verify=self.sslVerify, data=data, proxies=self.proxies)
+
+            if (res.status_code != requests.codes.ok):
+                logger.warn("i=\"%s\" URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanza_name, url, res.status_code, res.reason, res.text))
+                continue
+            success = True
+            break
+        if not success:
             logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanza_name, url, res.status_code, res.reason, res.text))
+
         res = json.loads(res.text)
 
         #Log return messages from Splunk, often these advise of an issue but not always...
@@ -1570,7 +1641,7 @@ class SplunkVersionControlRestore:
 
             if stderrout.find("error:") != -1 or stderrout.find("fatal:") != -1 or stderrout.find("timeout after") != -1:
                 if not self.show_passwords and self.git_password:
-                    stderrout = stderrout.replace(self.git_password, "password_removed")             
+                    stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.warn("i=\"%s\" error/fatal messages in git stderroutput please review. stderrout=\"%s\"" % (self.stanza_name, stderrout))
                 gitFailure = True
                 if stderrout.find("timeout after") != -1:
