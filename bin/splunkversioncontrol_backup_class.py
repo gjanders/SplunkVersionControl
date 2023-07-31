@@ -214,7 +214,10 @@ class SplunkVersionControlBackup:
                 break
 
         if not success:
-            logger.error("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
+            logger.fatal("i=\"%s\" URL=%s in app=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, app, res.status_code, res.reason, res.text))
+            # if we do not exit now we can run through and save what we can, but that will move the checkpoint forward
+            # and the backup may not occur in a future run, exit here
+            sys.exit(2)
         #Splunk returns data in XML format, use the element tree to work through it
         root = ET.fromstring(res.text)
 
@@ -797,7 +800,10 @@ class SplunkVersionControlBackup:
                 break
 
         if not success:
-            logger.error("i=\"%s\" Type macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
+            logger.fatal("i=\"%s\" Type macro in app=%s, URL=%s statuscode=%s reason=%s, response=\"%s\"" % (self.stanzaName, app, url, res.status_code, res.reason, res.text))
+            # if we do not exit now we can run through and save what we can, but that will move the checkpoint forward
+            # and the backup may not occur in a future run, exit here
+            sys.exit(7)
 
         #Parse the XML tree
         root = ET.fromstring(res.text)
@@ -1156,7 +1162,8 @@ class SplunkVersionControlBackup:
                 break
 
         if not success:
-            logger.error("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
+            logger.fatal("i=\"%s\" URL=%s statuscode=%s reason=%s response=\"%s\"" % (self.stanzaName, url, res.status_code, res.reason, res.text))
+            sys.exit(8)
 
         res = json.loads(res.text)
 
@@ -1470,7 +1477,7 @@ class SplunkVersionControlBackup:
         #If we're not using the useLocalAuth we must have a username/password to work with
         if useLocalAuth == False and ('srcUsername' not in config or 'srcPassword' not in config):
             logger.fatal("i=\"%s\" useLocalAuth is not set to true and srcUsername/srcPassword not set, exiting with failure" % (self.stanzaName))
-            sys.exit(1)
+            sys.exit(3)
 
         if useLocalAuth == False:
             self.srcUsername = config['srcUsername']
@@ -1654,7 +1661,7 @@ class SplunkVersionControlBackup:
                     output = output.replace(self.git_password, "password_removed")
                     stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
-                sys.exit(1)
+                sys.exit(4)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
                 if not ".git" in os.listdir(self.gitTempDir):
@@ -1743,7 +1750,7 @@ class SplunkVersionControlBackup:
                     output = output.replace(self.git_password, "password_removed")
                     stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
-                sys.exit(1)
+                sys.exit(5)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
 
@@ -1890,7 +1897,7 @@ class SplunkVersionControlBackup:
                     output = output.replace(self.git_password, "password_removed")
                     stderrout = stderrout.replace(self.git_password, "password_removed")
                 logger.fatal("i=\"%s\" git clone failed for some reason...on url %s stdout of '%s' with stderrout of '%s'" % (self.stanzaName, self.gitRepoURL_logsafe, output, stderrout))
-                sys.exit(1)
+                sys.exit(6)
             else:
                 logger.info("i=\"%s\" Successfully cloned the git URL from %s into directory %s" % (self.stanzaName, self.gitRepoURL_logsafe, self.gitTempDir))
 
