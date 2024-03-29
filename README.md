@@ -324,6 +324,10 @@ As of October 2022, there are still no signs of version control within the Splun
 - [Search Head Backup](https://splunkbase.splunk.com/app/6438) - backup to an index, works in Splunk Cloud
 
 ## Release Notes
+### 1.2.11
+Library updates:
+- Updated Splunk python SDK to 2.0.1
+
 ### 1.2.10
 Updates:
 - Disabled urllib3 warnings
