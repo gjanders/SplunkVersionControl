@@ -197,14 +197,16 @@ There are also many online resources to help with learning git
 - interval - how often should the remote server be checked to see if a restore is required. If you are on-prem and using the dynamic restore dashboard you do not need to set an interval, if this is a cloud based system or using the non-dynamic dashboard this is the interval to check the remote server for if a restore needs to be run (i.e. how long it is between a user requesting a restore and this script checking/polling the remote system to run the restoration job)
 
 ### Additional notes
-To get passwords into or out of the passwords.conf you may wish to use https://splunkbase.splunk.com/app/4013/
+To get passwords into or out of the passwords.conf you may wish to use [REST storage/passwords Manager for Splunk
+](https://splunkbase.splunk.com/app/4013/)
 
 The context of the application name (default of SplunkVersionControl) will be checked first for the password, if that fails a query to all contexts /-/-/ will occur, realms will be ignored, only the name of the password is used for searching so any realm (or lack of realm) will work for storing the password
 
 ## Example setup
 `srcURL` - so this is the remote port of the Splunk Cloud instance or localhost, for example: https://mycloudinstance.splunkcloud.com:8089
 `srcUsername` - as you'd expect, the username to login via REST API
-`srcPassword` - you can specify it in plaintext *or* if you do something like `password:splunkversioncontrol_user`, then the `splunkversioncontrol_use`r should be in passwords.conf (I use https://splunkbase.splunk.com/app/4013/ to add/remove passwords from passwords.conf but the command line works too)
+`srcPassword` - you can specify it in plaintext *or* if you do something like `password:splunkversioncontrol_user`, then the `splunkversioncontrol_use`r should be in passwords.conf (I use [REST storage/passwords Manager for Splunk
+](https://splunkbase.splunk.com/app/4013/) to add/remove passwords from passwords.conf but the command line works too)
 `gitTempDir` - I use `/tmp/git_backup` but the location can be any empty directory
 `gitRepoURL` - I use `https://myuser:password:myuser_token@git.tools.company.om/scm/splunk/ko_automated_backup.git`, this can be an SSH-based or a HTTPS-based repo
 
@@ -232,7 +234,7 @@ The following macros exist and are relate to the `splunkversioncontrol_restore_d
 If `run_ko_query` is configured, then the app will attempt to trigger the savedsearch configured by the macro `splunk_vc_ko_query`
 The macro should be in the format appcontext:savedsearchname
 
-By default this is configured to `splunk_kom:splunk_vc_kom_audit_summary` and was tested against version 1.0.26 of the Knowledge Object Overview App for Splunk (kom) application (https://splunkbase.splunk.com/app/5399/)
+By default this is configured to `splunk_kom:splunk_vc_kom_audit_summary` and was tested against version 1.0.26 of the [Knowledge Object Overview App for Splunk (kom) application](https://splunkbase.splunk.com/app/5399/)
 
 Note that the savedsearch `splunk_vc_kom_audit_summary` is included in the Splunk version control application but will need to be moved into the `splunk_kom` app context to work as expected, or you can make your own search if preferred.
 
