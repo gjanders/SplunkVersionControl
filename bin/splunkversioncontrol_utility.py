@@ -35,7 +35,8 @@ def runOSProcess(command, logger, timeout=60, shell=True):
     finally:
         timer.cancel()
 
-    if not timer.isAlive():
+    # As per https://github.com/gjanders/SplunkVersionControl/issues/28
+    if not getattr(timer, "isAlive", getattr(timer, "is_alive"))(): # Compatibility with >py3.8
         res = False
         logger.warn("OS process timed out after %s seconds, for command %s" % (timeout, command))
         proc.terminate()
