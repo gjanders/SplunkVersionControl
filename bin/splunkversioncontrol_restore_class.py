@@ -1695,6 +1695,7 @@ class SplunkVersionControlRestore:
                 #If the app is not known, the restore stops here as we have nothing to restore from!
                 if app not in knownAppList:
                     logger.error("i=\"%s\" user=%s requested a restore from app=%s but this is not in the knownAppList therefore restore cannot occur, object=%s of type=%s to be restored with user=%s and time=%s" % (self.stanza_name, user, app, name, obj_type, restore_as_user, time))
+                    message = f"i=\"{self.stanza_name}\" user={user} requested a restore from app={app} but this is not in the knownAppList therefore restore cannot occur, object={name} of type={obj_type} to be restored with user={restore_as_user} and time={time}"
                     continue
 
                 #Deal with the different types of restores that might be required, we only do one row at a time...
