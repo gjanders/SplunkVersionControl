@@ -43,7 +43,7 @@ def runOSProcess(command, logger, timeout=60, shell=True):
         return "", "timeout after %s seconds" % (timeout), False
     else:
         if proc.returncode != 0:
-            logger.debug("OS process exited with non-zero code of %s, for command %s" % (proc.returncode, command))
+            logger.debug("OS process exited with non-zero code of %s, for command %s, stdout %s, stderr %s" % (proc.returncode, command, stdout, stderr))
             res = False
         else:
             logger.debug("OS process exited with zero code, for command %s" % (command))
