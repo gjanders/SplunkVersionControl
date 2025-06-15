@@ -278,9 +278,9 @@ class SVCRestore(splunk.rest.BaseRestHandler):
 
             self.runHttpRequest(url, headers, None, 'delete', 'wiping kvstore splunkversioncontrol_rest_restore_status after completed run', sslVerify=sslVerify)
 
-    #Run a Splunk query via the search/jobs endpoint
+    #Run a Splunk query via the search/v2/jobs endpoint
     def runSearchJob(self, url, appname, headers, auth, username, earliest_time, sslVerify=False):
-        url = url + "/servicesNS/-/%s/search/jobs" % (appname)
+        url = url + "/servicesNS/-/%s/search/v2/jobs" % (appname)
         query = "savedsearch \"Splunk Version Control Audit Query POST\" username=\"%s\" | stats count | where count>0" % (username)
         logger.debug("Running requests.post() on url=%s query=\"%s\"" % (url, query))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot", "earliest_time" : earliest_time }

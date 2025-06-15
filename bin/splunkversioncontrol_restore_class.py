@@ -1228,9 +1228,9 @@ class SplunkVersionControlRestore:
     def without_keys(self, d, keys):
         return {x: d[x] for x in d if x not in keys}
 
-    #Run a Splunk query via the search/jobs endpoint
+    #Run a Splunk query via the search/v2/jobs endpoint
     def runSearchJob(self, query, earliest_time="-1h"):
-        url = self.splunk_rest + "/servicesNS/-/%s/search/jobs" % (self.appName)
+        url = self.splunk_rest + "/servicesNS/-/%s/search/v2/jobs" % (self.appName)
         logger.debug("i=\"%s\" Running requests.post() on url=%s with user=%s query=\"%s\" proxies_length=%s" % (self.stanza_name, url, self.destUsername, query, len(self.proxies)))
         data = { "search" : query, "output_mode" : "json", "exec_mode" : "oneshot", "earliest_time" : earliest_time }
 

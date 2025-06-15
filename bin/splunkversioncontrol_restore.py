@@ -237,7 +237,7 @@ def validate_arguments():
 
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:
-        url = val_data['destURL'] + "/servicesNS/nobody/%s/search/jobs/export?search=makeresults" % (appName)
+        url = val_data['destURL'] + "/servicesNS/nobody/%s/search/v2/jobs/export?search=makeresults" % (appName)
         destUsername = val_data['destUsername']
         destPassword = val_data['destPassword']
 

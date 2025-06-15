@@ -326,6 +326,18 @@ As of October 2022, there are still no signs of version control within the Splun
 - [Search Head Backup](https://splunkbase.splunk.com/app/6438) - backup to an index, works in Splunk Cloud
 
 ## Release Notes
+### 1.2.14
+- `splunkversioncontrol_utility.py` - additional logging for errors
+
+- `splunkversioncontrol_backup.py`
+- `splunkversioncontrol_backup_class.py`
+- `splunkversioncontrol_restore.py`
+- `splunkversioncontrol_rest_restore.py`
+- `splunkversioncontrol_restore_class.py`
+
+Modified to use the REST API search/jobs v2 endpoint
+
+
 ### 1.2.13
 - `splunkversioncontrol_restore_class.py` - updated to show a message if the app in question does not exist
 

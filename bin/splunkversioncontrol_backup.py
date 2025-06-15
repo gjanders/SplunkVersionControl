@@ -312,7 +312,7 @@ def validate_arguments():
 
     #Run a sanity check and make sure we can connect into the remote Splunk instance
     if not useLocalAuth:
-        url = val_data['srcURL'] + "/servicesNS/nobody/%s/search/jobs/export?search=makeresults" % (appName)
+        url = val_data['srcURL'] + "/servicesNS/nobody/%s/search/v2/jobs/export" % (appName)
         srcUsername = val_data['srcUsername']
         srcPassword = val_data['srcPassword']
         if srcPassword.find("password:") == 0:
@@ -330,7 +330,7 @@ def validate_arguments():
 
         try:
             logger.debug("Running query against URL %s with username %s proxies_length=%s sslVerify=%s" % (url, srcUsername, len(proxies), sslVerify))
-            res = requests.get(url, auth=(srcUsername, srcPassword), verify=sslVerify, proxies=proxies)
+            res = requests.post(url, auth=(srcUsername, srcPassword), verify=sslVerify, proxies=proxies, data={"search": "| makeresults"})
             logger.debug("End query against URL %s with username %s" % (url, srcUsername))
 
             if (res.status_code != requests.codes.ok):
