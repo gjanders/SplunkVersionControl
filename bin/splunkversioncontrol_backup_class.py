@@ -944,7 +944,7 @@ class SplunkVersionControlBackup:
     #
     ###########################
     def dashboards(self, app):
-        ignoreList = [ "disabled", "eai:appName", "eai:digest", "eai:userName", "isDashboard", "isVisible", "label", "rootNode", "description", "version" ]
+        ignoreList = [ "embed.enabled", "disabled", "eai:appName", "eai:digest", "eai:userName", "isDashboard", "isVisible", "label", "rootNode", "description", "version" ]
         return self.runQueries(app, "/data/ui/views", "dashboards", ignoreList)
 
     ###########################
