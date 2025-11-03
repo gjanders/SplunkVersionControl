@@ -326,6 +326,9 @@ As of October 2022, there are still no signs of version control within the Splun
 - [Search Head Backup](https://splunkbase.splunk.com/app/6438) - backup to an index, works in Splunk Cloud
 
 ## Release Notes
+### 1.2.16
+- `splunkversioncontrol_backup_class.py` - added  "embed.expiry" to ignoreList (due to reports of issues in dashboards in new versions of Splunk cloud)
+
 ### 1.2.15
 - `splunkversioncontrol_backup_class.py` - added  "embed.enabled" to ignoreList (due to reports of issues in dashboards in new versions of Splunk cloud)
 
