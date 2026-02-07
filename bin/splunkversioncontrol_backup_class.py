@@ -1087,7 +1087,7 @@ class SplunkVersionControlBackup:
     #
     ##########################
     def collections(self, app):
-        ignoreList = [ "eai:appName", "eai:userName", "type" ]
+        ignoreList = [ "eai:appName", "eai:userName", "type", "disabled" ]
         #nobody is the only username that can be used when working with collections
         return self.runQueries(app, "/storage/collections/config", "collections_kvstore", ignoreList)
 

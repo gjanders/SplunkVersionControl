@@ -8,6 +8,9 @@ jobs:
     name: "Run on push - Add Utilities & App Inspect"
     runs-on: "ubuntu-latest"
 
+    env:
+      SPLUNK_APP_ACTION_1: "rm -rf test"
+
     steps:
       - uses: VatsalJagani/splunk-app-action@v4
         with:
