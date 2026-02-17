@@ -1067,7 +1067,7 @@ class SplunkVersionControlBackup:
     #
     ##########################
     def navMenu(self, app):
-        ignoreList = [ "disabled", "eai:appName", "eai:userName", "eai:digest", "rootNode" ]
+        ignoreList = [ "disabled", "eai:appName", "eai:userName", "eai:digest", "rootNode", "color" ]
         #If override we override the default nav menu of the destination app
         return self.runQueries(app, "/data/ui/nav", "navMenu", ignoreList)
 

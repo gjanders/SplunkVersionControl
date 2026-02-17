@@ -328,6 +328,10 @@ As of October 2022, there are still no signs of version control within the Splun
 ## Release Notes
 ### 1.2.18
 Updates to `splunkversioncontrol_backup_class.py`:
+- Remove the "color" flag from the navigation menu if it exists during the backup
+
+### 1.2.18
+Updates to `splunkversioncontrol_backup_class.py`:
 - Remove the "disabled" flag from the collections if it exists during the backup
 
 ### 1.2.17
