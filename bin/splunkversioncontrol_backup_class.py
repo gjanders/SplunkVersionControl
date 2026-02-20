@@ -193,7 +193,7 @@ class SplunkVersionControlBackup:
         creationSuccess = []
         #Keep a success list to be returned by this function
         #Use count=-1 to ensure we see all the objects
-        url = self.splunk_rest + "/servicesNS/-/" + app + endpoint + "?count=-1" + extra_args
+        url = f"{self.splunk_rest}/servicesNS/-/{app}{endpoint}?count=-1&search=eai:acl.app={app}{extra_args}"
         logger.debug("i=\"%s\" Running requests.get() on %s user=%s in app=%s, proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies), self.sslVerify))
 
         headers = {}
@@ -800,7 +800,7 @@ class SplunkVersionControlBackup:
 
         #servicesNS/-/-/properties/macros doesn't show private macros so using /configs/conf-macros to find all the macros
         #again with count=-1 to find all the available macros
-        url = self.splunk_rest + "/servicesNS/-/" + app + "/configs/conf-macros?count=-1"
+        url = f"{self.splunk_rest}/servicesNS/-/{app}/configs/conf-macros?count=-1&search=eai:acl.app={app}"
         logger.debug("i=\"%s\" Running requests.get() on url=%s with user=%s in app=%s for type macro proxies_length=%s, sslVerify=%s" % (self.stanzaName, url, self.srcUsername, app, len(self.proxies), self.sslVerify))
 
         headers = {}
@@ -1985,4 +1985,3 @@ class SplunkVersionControlBackup:
             shutil.rmtree(self.gitTempDir)
 
         logger.info("i=\"%s\" Done" % (self.stanzaName))
-
