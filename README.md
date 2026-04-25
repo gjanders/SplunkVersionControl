@@ -326,6 +326,9 @@ As of October 2022, there are still no signs of version control within the Splun
 - [Search Head Backup](https://splunkbase.splunk.com/app/6438) - backup to an index, works in Splunk Cloud
 
 ## Release Notes
+### 1.2.19
+Adding python.required in `inputs.conf`, `commands.conf` and `restmap.conf` as requested by splunkbase, this is supported in 10.2 and above. Harmless warning messages may occur on older Splunk versions.
+
 ### 1.2.18
 Updates to `splunkversioncontrol_backup_class.py`:
 - Remove the "color" flag from the navigation menu if it exists during the backup
