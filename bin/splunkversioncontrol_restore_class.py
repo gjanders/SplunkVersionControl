@@ -18,11 +18,10 @@ import platform
 import hashlib
 import fnmatch
 import urllib3
+from urllib.parse import quote_plus
 from splunkversioncontrol_utility import runOSProcess, get_password
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
-
-from splunklib import six
 
 
 """
@@ -143,7 +142,7 @@ class SplunkVersionControlRestore:
     #
     ###########################
     def gen_file_name(self, name):
-        file_name = six.moves.urllib.parse.quote_plus(name)
+        file_name = quote_plus(name)
         if len(file_name) > 254:
             hash = hashlib.md5(name.encode('utf-8')).hexdigest()
             file_name = file_name[0:222] + hash

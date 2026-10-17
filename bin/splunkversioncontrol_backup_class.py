@@ -17,10 +17,10 @@ from io import open
 import platform
 import hashlib
 import urllib3
+from urllib.parse import quote_plus
 from splunkversioncontrol_utility import runOSProcess, get_password
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from splunklib import six
 from unidiff import PatchSet
 
 """
@@ -454,7 +454,7 @@ class SplunkVersionControlBackup:
             else:
                 # in the original method we dumped 1 large file with all objects of this type at this scope
                 with open(globalStorageDir + "/" + obj_type, 'w', encoding="utf-8") as f:
-                    f.write(six.text_type(json.dumps(infoList["global"], sort_keys=True, indent=0)))
+                    f.write(json.dumps(infoList["global"], sort_keys=True, indent=0))
                     # add newline so git doesn't think it's different every commit...
                     f.write("\n")
         if "app" in infoList:
@@ -470,7 +470,7 @@ class SplunkVersionControlBackup:
             else:
             # in the original method we dumped 1 large file with all objects of this type at this scope
                 with open(appLevelStorageDir + "/" + obj_type, 'w', encoding="utf-8") as f:
-                    f.write(six.text_type(json.dumps(infoList["app"], sort_keys=True, indent=0)))
+                    f.write(json.dumps(infoList["app"], sort_keys=True, indent=0))
                     # add newline so git doesn't think it's different every commit...
                     f.write("\n")
         if "user" in infoList:
@@ -487,7 +487,7 @@ class SplunkVersionControlBackup:
             else:
                 # in the original method we dumped 1 large file with all objects of this type at this scope
                 with open(userLevelStorageDir + "/" + obj_type, 'w', encoding="utf-8") as f:
-                    f.write(six.text_type(json.dumps(infoList["user"], sort_keys=True, indent=0)))
+                    f.write(json.dumps(infoList["user"], sort_keys=True, indent=0))
                     # add newline so git doesn't think it's different every commit...
                     f.write("\n")
         return creationSuccess
@@ -533,7 +533,7 @@ class SplunkVersionControlBackup:
     #
     ###########################
     def create_file_name(self, file):
-        file_name = six.moves.urllib.parse.quote_plus(file)
+        file_name = quote_plus(file)
         # if a file exceeds 255 characters it will result in a file too long error (e.g. really long field extraction names
         if len(file_name) > 254:
             hash = hashlib.md5(file.encode('utf-8')).hexdigest()
@@ -552,9 +552,9 @@ class SplunkVersionControlBackup:
             file_name = self.create_file_name(an_object["name"])
             an_object_file = an_object_dir + "/" + file_name
             with open(an_object_file, 'w', encoding="utf-8") as f:
-                f.write(six.text_type(json.dumps(an_object, sort_keys=True, indent=0)))
+                f.write(json.dumps(an_object, sort_keys=True, indent=0))
                 # add newline so git doesn't think it's different every commit...
-                f.write(six.text_type("\n"))
+                f.write("\n")
             try:
                 files.remove(an_object_file)
             except:
@@ -945,7 +945,7 @@ class SplunkVersionControlBackup:
             else:
                 # in the original method we dumped 1 large file with all macros at this scope
                 with open(globalStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                    f.write(six.text_type(json.dumps(macros["global"], sort_keys=True, indent=0)))
+                    f.write(json.dumps(macros["global"], sort_keys=True, indent=0))
                     # add newline so git doesn't think it's different every commit...
                     f.write("\n")
         if "app" in macros:
@@ -962,7 +962,7 @@ class SplunkVersionControlBackup:
             else:
                 # in the original method we dumped 1 large file with all macros at this scope
                 with open(appLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                    f.write(six.text_type(json.dumps(macros["app"], sort_keys=True, indent=0)))
+                    f.write(json.dumps(macros["app"], sort_keys=True, indent=0))
                     # add newline so git doesn't think it's different every commit...
                     f.write("\n")
         if "user" in macros:
@@ -979,7 +979,7 @@ class SplunkVersionControlBackup:
             else:
                 # in the original method we dumped 1 large file with all macros at this scope
                 with open(userLevelStorageDir + "/macros", 'w', encoding="utf-8") as f:
-                    f.write(six.text_type(json.dumps(macros["user"], sort_keys=True, indent=0)))
+                    f.write(json.dumps(macros["user"], sort_keys=True, indent=0))
                     # add newline so git doesn't think it's different every commit...
                     f.write("\n")
 
@@ -1977,7 +1977,7 @@ class SplunkVersionControlBackup:
         if not gitFailure:
             #Output the time we did the run so we know where to continue from at next runtime
             with open(versionControlFile, 'w', encoding="utf-8") as checkpointFile:
-                checkpointFile.write(six.text_type(currentEpochTime))
+                checkpointFile.write(str(currentEpochTime))
             logger.info("i=\"%s\" lastrun_epoch=%s written to checkpoint file=%s" % (self.stanzaName, currentEpochTime, versionControlFile))
         else:
             logger.error("i=\"%s\" git failure occurred during runtime, not updating the epoch value. This failure  may require investigation, please refer to the WARNING messages in the logs" % (self.stanzaName))

@@ -11,10 +11,9 @@ import calendar
 import sys
 import splunk.rest
 import urllib3
+from urllib.parse import parse_qs, quote
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
-
-from splunklib import six
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "bin"))
 from splunkversioncontrol_restore_class import SplunkVersionControlRestore
@@ -87,7 +86,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
 
     def handle_POST(self):
         starttime = calendar.timegm(time.gmtime())
-        payload = six.moves.urllib.parse.parse_qs(self.request['payload'])
+        payload = parse_qs(self.request['payload'])
         #self.response.write(str(payload) + "\n")
         #currently we only receive the Splunk authorization key, so obtain that
 
@@ -107,7 +106,7 @@ class SVCRestore(splunk.rest.BaseRestHandler):
 
         #Now run queries locally to check if the mentioned config matches an existing backup name
         headers = { "Authorization" : "Splunk " + self.request['systemAuth'] }
-        url = "https://localhost:8089/servicesNS/-/-/data/inputs/splunkversioncontrol_restore/" + six.moves.urllib.parse.quote(splunk_vc_name) + "?output_mode=json"
+        url = "https://localhost:8089/servicesNS/-/-/data/inputs/splunkversioncontrol_restore/" + quote(splunk_vc_name) + "?output_mode=json"
         logger.debug("Now running query against url=%s to obtain config information" % (url))
 
         res = self.runHttpRequest(url, headers, None, "get", "querying the inputs for splunkversioncontrol_restore with name %s" % (splunk_vc_name), sslVerify=False)
